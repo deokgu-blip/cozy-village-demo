@@ -634,9 +634,7 @@
     //   33%→코인, 66%→코인, 100%→부스터 1개(+기존 디오라마 완성/월드완성 연출은 그대로).
     //   중복방지: m.dioramaMilestones[dioramaId] = [33,66,100 중 이미 지급한 threshold...].
     dioramaMilestones: [
-      { pct: 33,  reward: { coins: 100 } },
-      { pct: 66,  reward: { coins: 200 } },
-      { pct: 100, reward: { booster: 'color_bomb' } }   // 100% → 부스터 아이템 1개
+      { pct: 100, reward: { booster: 'color_bomb' } }   // 100% → 부스터 아이템 1개만(코인 미지급)
     ],
 
     // ── 업적(장기 목표 — 데일리 미션과 별개) (Wave2-B) ──
