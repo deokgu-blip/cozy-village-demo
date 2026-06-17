@@ -3807,7 +3807,6 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   .coin-pill {
     position:relative; display:inline-flex; align-items:center; height:50px;
     padding:0 16px 0 0; min-width:150px;
-    pointer-events:auto; cursor:pointer;   /* 탭 가능(코인 5탭 → 개발자모드). #hud-top 는 pointer-events:none 이라 여기서 살림 */
     font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-weight:400; font-size:23px;
     color:#6e4f1f; letter-spacing:.3px;
     text-shadow:0 1px 0 rgba(255,255,255,.55);
@@ -3818,10 +3817,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     background:#f3e8d0; border-radius:999px; border:2px solid #e4d4b2;
     box-shadow:0 3px 4px rgba(90,60,15,.30), inset 0 2px 0 rgba(255,255,255,.78), inset 0 -2px 3px rgba(190,150,90,.22); }
   /* coin-icon: 골드코인 아이콘 — 크게(40px, 바보다 큼) */
-  /* center/90%: 코인이 50px 박스 가장자리에 닿지 않게 여백 → iOS Safari 에서 filter 레이어 박스가 '투명 사각 테두리'로 보이던 현상 제거(사용자 신고). */
+  /* ★ filter:drop-shadow 제거(사용자 요청): iOS Safari 에서 이 그림자 레이어가 50px 박스를 '투명 사각 테두리'로 래스터해 보였음. 코인 음영은 webp 에 내장돼 그림자 없어도 입체감 유지. */
   .coin-icon { position:relative; z-index:2; flex:0 0 auto; width:50px; height:50px; border-radius:0;
-    background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%, #ffe08a, #f5b417 70%, #d68f00))) center/90% no-repeat;
-    filter:drop-shadow(0 3px 3px rgba(0,0,0,.32)); }
+    background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%, #ffe08a, #f5b417 70%, #d68f00))) center/contain no-repeat; }
   .coin-icon::after { content:none; }
   #coin-amount { position:relative; z-index:2; line-height:1; margin-left:9px; }
   /* ── LEVEL 표시: 원본처럼 평범한 흰색 볼드 텍스트(칩/배너 제거) ── */
@@ -3962,8 +3960,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     background:rgba(8,18,40,.5); border:2px solid rgba(120,165,235,.28); border-radius:13px; padding:11px 15px; margin-bottom:15px; }
   .settings-label { font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:18px; color:#e8eeff; letter-spacing:.5px; }
   /* 임시(DEV) 토글 행 — 관리자 전용(사용자 신고 #7). 기본 숨김; 관리자(?dev/?admin)일 때만 JS가 켠다. */
-  .settings-row.dev-row { display:none; border-color:rgba(255,150,60,.55); border-style:dashed; }
-  .settings-row.dev-row.admin-on { display:flex; }
+  /* ★ Test(DEV) 토글: 설정에서 누구나 켜고 끌 수 있게 항상 노출(사용자 요청). 기본 OFF 라 평소엔 테스터/레벨선택 안 보임. */
+  .settings-row.dev-row { display:flex; border-color:rgba(255,150,60,.55); border-style:dashed; }
   .settings-row.dev-row .settings-label { color:#ffb46e; }
   .dev-badge { display:inline-block; margin-left:7px; padding:1px 6px; border-radius:7px;
     background:#ff8a3c; color:#241200; font-family:'TitanOne',sans-serif; font-size:10px; letter-spacing:.5px; vertical-align:middle; }
@@ -5652,10 +5650,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   })();
   window.__IS_ADMIN = IS_ADMIN;
   function readTestMode(){
-    // 관리자가 아니면 테스트모드(=스테이지 선택/테스터)는 무조건 OFF — 저장된 값과 무관(일반 유저 차단).
-    if (!IS_ADMIN) return false;
-    // 관리자: 저장된 선호 존중(기본 ON). 관리자만 설정 Test 토글로 끌 수 있다.
-    try{ const v=localStorage.getItem('cb_testmode'); if(v==null) return true; return v==='1'; }catch(e){ return true; }
+    // ★ 설정 Test(DEV) 토글로 제어(사용자 요청). 기본 OFF — 저장값이 '1' 일 때만 ON(일반 유저는 안 켜면 테스터/스테이지선택 안 나옴).
+    try{ return localStorage.getItem('cb_testmode')==='1'; }catch(e){ return false; }
   }
   const TEST_ALL_PU = (typeof window!=='undefined' && window.__EDITOR) ? true : readTestMode();   // 에디터는 항상 ON
   window.__TEST_INFINITE_PU = !!TEST_ALL_PU;   // 무한 사용(소진 가드와 공유) — 런타임 플래그에 연동
@@ -11935,21 +11931,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   document.getElementById('bgm-toggle').addEventListener('pointerdown', e=>{ e.stopPropagation(); setBgm(!SOUND.bgm); });
   document.getElementById('haptic-toggle').addEventListener('pointerdown', e=>{ e.stopPropagation(); setHaptic(!HAPTIC.enabled); });
   // 🔒 관리자 전용: Test(DEV) 토글 행은 관리자(?dev/?admin)에게만 노출. 일반 유저에겐 행 자체를 숨긴다(사용자 신고 #7).
-  { const _dr=document.querySelector('.settings-row.dev-row'); if(_dr && IS_ADMIN) _dr.classList.add('admin-on'); }
-  { const _tt=document.getElementById('test-toggle'); if(_tt && IS_ADMIN) _tt.addEventListener('pointerdown', e=>{ e.stopPropagation(); setTestMode(!TEST_ALL_PU); }); }   // 관리자만: 토글 → 영속 저장 후 새로고침(게이트/부트플로우/🧪 재적용)
-  // 🔑 코인 5번 탭 → 개발자(관리자) 모드 ON (모바일에서 ?dev 없이 진입; 사용자 요청). 2.5초 내 5탭 시 cb_admin/cb_testmode 저장 후 새로고침.
-  { const _cp=document.querySelector('.coin-pill');
-    if(_cp){ let _tap=0,_tlast=0;
-      _cp.addEventListener('pointerdown', ()=>{
-        if(window.__IS_ADMIN) return;                      // 이미 관리자면 무시
-        const t=Date.now(); if(t-_tlast>2500) _tap=0; _tlast=t; _tap++;
-        if(_tap>=5){ _tap=0;
-          try{ sessionStorage.setItem('cb_admin','1'); localStorage.setItem('cb_testmode','1'); }catch(e){}
-          try{ alert('개발자 모드 ON'); }catch(e){}
-          try{ location.reload(); }catch(e){}
-        }
-      });
-    } }
+  // ★ Test(DEV) 토글 = 누구나 설정에서 켜고 끄기(사용자 요청). 켜면 setTestMode 가 cb_testmode 저장 후 새로고침 → 테스터/레벨선택/무한파워업 노출.
+  { const _tt=document.getElementById('test-toggle'); if(_tt) _tt.addEventListener('pointerdown', e=>{ e.stopPropagation(); setTestMode(!TEST_ALL_PU); }); }
   document.getElementById('settings-home').addEventListener('pointerdown', e=>{ e.stopPropagation(); closeSettings(); goHome(); });
   elSettings.addEventListener('pointerdown', e=>{ if(e.target===elSettings) closeSettings(); });   // 배경 탭 = 닫기
 
