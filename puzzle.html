@@ -3807,6 +3807,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   .coin-pill {
     position:relative; display:inline-flex; align-items:center; height:50px;
     padding:0 16px 0 0; min-width:150px;
+    pointer-events:auto; cursor:pointer;   /* 탭 가능(코인 5탭 → 개발자모드). #hud-top 는 pointer-events:none 이라 여기서 살림 */
     font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-weight:400; font-size:23px;
     color:#6e4f1f; letter-spacing:.3px;
     text-shadow:0 1px 0 rgba(255,255,255,.55);
@@ -3817,8 +3818,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     background:#f3e8d0; border-radius:999px; border:2px solid #e4d4b2;
     box-shadow:0 3px 4px rgba(90,60,15,.30), inset 0 2px 0 rgba(255,255,255,.78), inset 0 -2px 3px rgba(190,150,90,.22); }
   /* coin-icon: 골드코인 아이콘 — 크게(40px, 바보다 큼) */
+  /* center/90%: 코인이 50px 박스 가장자리에 닿지 않게 여백 → iOS Safari 에서 filter 레이어 박스가 '투명 사각 테두리'로 보이던 현상 제거(사용자 신고). */
   .coin-icon { position:relative; z-index:2; flex:0 0 auto; width:50px; height:50px; border-radius:0;
-    background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%, #ffe08a, #f5b417 70%, #d68f00))) center/contain no-repeat;
+    background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%, #ffe08a, #f5b417 70%, #d68f00))) center/90% no-repeat;
     filter:drop-shadow(0 3px 3px rgba(0,0,0,.32)); }
   .coin-icon::after { content:none; }
   #coin-amount { position:relative; z-index:2; line-height:1; margin-left:9px; }
@@ -4242,11 +4244,11 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     background-size:100% 100%; background-repeat:no-repeat; transform-origin:bottom center;
   }
   #powerups {
-    position:absolute; left:0; right:0; bottom:0; height:104px;
-    display:flex; gap:14px; justify-content:center; align-items:center; z-index:9;
+    position:absolute; left:0; right:0; bottom:0; height:116px;
+    display:flex; gap:6px; justify-content:center; align-items:center; z-index:9;
   }
   /* 파워업 슬롯 — 브롤 글로시 라운드 프레임(호스트 pu_base 없을 때 폴백) */
-  .pu { width:62px; height:62px; position:relative; pointer-events:auto; border-radius:17px;
+  .pu { width:72px; height:72px; position:relative; pointer-events:auto; border-radius:19px;
     background:linear-gradient(180deg,#56a4ff 0%,#2f86e6 50%,#1f6fd0 100%);
     border:3px solid #13315c;
     box-shadow:0 5px 0 #0e294f, 0 7px 11px rgba(8,28,64,.3),
@@ -11935,6 +11937,19 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   // 🔒 관리자 전용: Test(DEV) 토글 행은 관리자(?dev/?admin)에게만 노출. 일반 유저에겐 행 자체를 숨긴다(사용자 신고 #7).
   { const _dr=document.querySelector('.settings-row.dev-row'); if(_dr && IS_ADMIN) _dr.classList.add('admin-on'); }
   { const _tt=document.getElementById('test-toggle'); if(_tt && IS_ADMIN) _tt.addEventListener('pointerdown', e=>{ e.stopPropagation(); setTestMode(!TEST_ALL_PU); }); }   // 관리자만: 토글 → 영속 저장 후 새로고침(게이트/부트플로우/🧪 재적용)
+  // 🔑 코인 5번 탭 → 개발자(관리자) 모드 ON (모바일에서 ?dev 없이 진입; 사용자 요청). 2.5초 내 5탭 시 cb_admin/cb_testmode 저장 후 새로고침.
+  { const _cp=document.querySelector('.coin-pill');
+    if(_cp){ let _tap=0,_tlast=0;
+      _cp.addEventListener('pointerdown', ()=>{
+        if(window.__IS_ADMIN) return;                      // 이미 관리자면 무시
+        const t=Date.now(); if(t-_tlast>2500) _tap=0; _tlast=t; _tap++;
+        if(_tap>=5){ _tap=0;
+          try{ sessionStorage.setItem('cb_admin','1'); localStorage.setItem('cb_testmode','1'); }catch(e){}
+          try{ alert('개발자 모드 ON'); }catch(e){}
+          try{ location.reload(); }catch(e){}
+        }
+      });
+    } }
   document.getElementById('settings-home').addEventListener('pointerdown', e=>{ e.stopPropagation(); closeSettings(); goHome(); });
   elSettings.addEventListener('pointerdown', e=>{ if(e.target===elSettings) closeSettings(); });   // 배경 탭 = 닫기
 
