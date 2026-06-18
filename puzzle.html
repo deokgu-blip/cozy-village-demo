@@ -11245,9 +11245,11 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     obj.traverse(o=>{ if (enable) o.layers.enable(1); else o.layers.disable(1); });
   }
   function _obHighlightObjects(){
-    // 온보딩: 복셀 모델은 항상 딤 위로. 탭 단계는 '앞줄 가운데 대상 문어'도 함께 딤 위로.
+    // 온보딩: 모델 + '탭→슬롯으로 올라간 문어 + 날아가는 총알'까지 딤 위로 → 발사 장면이 잘 보임. 탭 단계는 대상 큐 문어도.
     var arr=[];
     if (voxelMesh) arr.push(voxelMesh);
+    for (var s=0;s<SLOTS;s++){ var c=slots[s]; if (c && c.octo) arr.push(c.octo); }   // 슬롯에 올라가 발사 중인 문어
+    try{ for (var bi=0;bi<BULLET_POOL.length;bi++){ var bb=BULLET_POOL[bi]; if (bb && bb.active && bb.mesh && bb.mesh.visible) arr.push(bb.mesh); } }catch(e){}   // 날아가는 총알
     if (_obStep===1){
       var mid=Math.floor(((typeof QUEUE!=='undefined'&&QUEUE.cols)?QUEUE.cols:3)/2), tgt=null;
       for (var i=0;i<queueOctos.length;i++){ var q=queueOctos[i]; if(q&&q.row===0&&q.octo){ if(!tgt)tgt=q; if(q.col===mid){tgt=q;break;} } }
