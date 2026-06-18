@@ -4577,15 +4577,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   #ob-overlay{ position:fixed; inset:0; z-index:120; pointer-events:none; opacity:0; display:none; transition:opacity .35s; }
   #ob-overlay.show{ opacity:1; display:block; }
   /* 딤: 화면을 어둑하게 + 모델/대상문어 '구멍'(스팟라이트)으로 환하게. 텍스트·펄스는 딤 위(z-index:3). */
-  #ob-dim{ position:absolute; inset:0; opacity:0; transition:opacity .35s; }
-  #ob-overlay.show #ob-dim{ opacity:1; }
-  /* 모델(위쪽)은 딤 안 함 → 어둑한 그리드 위로 환하게 떠 보임(스팟라이트 원 없음). 탭 단계는 대상 문어에 스팟라이트 구멍. */
-  #ob-overlay.step-tap #ob-dim{
-    background:linear-gradient(to bottom, transparent 43%, rgba(6,10,18,.62) 64%);
-    -webkit-mask: radial-gradient(circle 56px at var(--ox,50%) var(--oy,74%), transparent 44%, #000 86%);
-    mask: radial-gradient(circle 56px at var(--ox,50%) var(--oy,74%), transparent 44%, #000 86%); }
-  #ob-overlay.step-drag #ob-dim{
-    background:linear-gradient(to bottom, transparent 55%, rgba(6,10,18,.6) 76%); }
+  /* 딤은 게임 기본 시스템(#dim-layer + #dim-strip + glHi 하이라이트, 아이템 사용과 동일)을 renderSpotlight 에서 재사용 → 별도 #ob-dim 없음. */
+  /* 온보딩 중 상단 메타 UI(코인·기어)도 딤 아래처럼 흐리게 — 사용자: 코인재화는 딤 아래로. (LEVEL·튜토 텍스트는 유지) */
+  body.ob-active .coin-pill, body.ob-active #settings-btn { opacity:.28; transition:opacity .3s; pointer-events:none; }
   #ob-text{ position:absolute; left:0; right:0; top:13%; text-align:center; padding:0 30px; z-index:3;
     font:800 23px/1.34 -apple-system,'Baloo 2',BlinkMacSystemFont,'Segoe UI',sans-serif; color:#fff; letter-spacing:.2px;
     text-shadow:0 3px 0 #16304f, 0 1px 0 #16304f, 0 0 16px rgba(0,0,0,.6); }
@@ -4781,7 +4775,6 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
 </div><!-- /#fit-root -->
 <!-- 온보딩 오버레이는 fit-root(트랜스폼) 밖 = 뷰포트 고정 → getBoundingClientRect(뷰포트 px)로 문어에 정확히 정렬 -->
 <div id="ob-overlay" aria-hidden="true">
-  <div id="ob-dim"></div>
   <div id="ob-text"></div>
   <div id="ob-tap"><span class="rip"></span><span class="rip r2"></span><span class="dot"></span></div>
   <div id="ob-swipe"><span class="chev l"></span><span class="puck"></span><span class="chev r"></span></div>
@@ -11191,6 +11184,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   function obRender(){
     // 펄스/딤 위치는 updateOctoNumbers(매 프레임)가 '앞줄 가운데 문어'에 정렬한다. 여기선 단계/텍스트만.
     var ov=document.getElementById('ob-overlay'), tx=document.getElementById('ob-text'); if(!ov) return;
+    document.body.classList.toggle('ob-active', _obStep===1||_obStep===2);   // 코인/기어 등 상단 메타 UI 딤 아래로(흐리게)
     if (_obStep===1){ ov.className='show step-tap'; if(tx) tx.textContent='Tap the octopus to shoot!'; }
     else if (_obStep===2){ ov.className='show step-drag'; if(tx) tx.textContent='Drag to spin & uncover hidden colors!'; }
     else { ov.className=''; }
@@ -11261,9 +11255,21 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   function _setObjLayerEnable(obj, enable){
     obj.traverse(o=>{ if (enable) o.layers.enable(1); else o.layers.disable(1); });
   }
+  function _obHighlightObjects(){
+    // 온보딩: 복셀 모델은 항상 딤 위로. 탭 단계는 '앞줄 가운데 대상 문어'도 함께 딤 위로.
+    var arr=[];
+    if (voxelMesh) arr.push(voxelMesh);
+    if (_obStep===1){
+      var mid=Math.floor(((typeof QUEUE!=='undefined'&&QUEUE.cols)?QUEUE.cols:3)/2), tgt=null;
+      for (var i=0;i<queueOctos.length;i++){ var q=queueOctos[i]; if(q&&q.row===0&&q.octo){ if(!tgt)tgt=q; if(q.col===mid){tgt=q;break;} } }
+      if (tgt && tgt.octo) arr.push(tgt.octo);
+    }
+    return arr;
+  }
   function renderSpotlight(){
-    // gameLoop에서 메인 렌더 직전/직후에 호출. puMode가 있을 때만 동작.
-    if (!puMode){
+    // gameLoop에서 메인 렌더 직전/직후에 호출. puMode(아이템) 또는 온보딩(_obStep) 활성 시 동작 — 동일 딤+하이라이트 재사용.
+    var obTut = (_obStep===1 || _obStep===2);
+    if (!puMode && !obTut){
       // 보조 캔버스 + dim(박스내부+전체뷰포트 strip) 숨김
       glCanvasHi.classList.remove('show');
       document.getElementById('dim-layer').classList.remove('show');
@@ -11276,8 +11282,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     document.getElementById('dim-strip').classList.add('show');
     // 스프링 모드: 슬롯 DOM도 dim 위로 끌어올림
     document.body.classList.toggle('spotlight-slots', puMode==='extra');
-    // 하이라이트 대상 모으기
-    const hi=_getHighlightObjects(puMode);
+    // 하이라이트 대상 모으기 (아이템=모드별, 온보딩=모델+대상문어)
+    const hi = puMode ? _getHighlightObjects(puMode) : _obHighlightObjects();
     if (!hi.length){ glCanvasHi.classList.remove('show'); return; }
     // 레이어 1 enable
     for (const obj of hi) _setObjLayerEnable(obj, true);
