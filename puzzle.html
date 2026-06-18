@@ -4573,25 +4573,36 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   #over-diagram .od-top .od-cell.octo { width:25px; height:25px; }
   #over-diagram .od-arrow { position:absolute; left:50%; top:34px; transform:translateX(-50%); font-size:20px; color:#7fe06a; text-shadow:0 0 6px rgba(110,220,90,.8); animation:odSpring 1.1s ease-in-out infinite; }
   @keyframes odSpring { 0%,100%{ transform:translateX(-50%) translateY(0);} 50%{ transform:translateX(-50%) translateY(-7px);} }
-  /* ===== 온보딩 튜토리얼(1스테이지): 탭 펄스 / 드래그 스와이프 인디케이터 (손 없음·토이톤) ===== */
-  #ob-overlay{ position:fixed; inset:0; z-index:62; pointer-events:none; opacity:0; display:none; transition:opacity .35s; }
+  /* ===== 온보딩 튜토리얼(1스테이지): 딤 스팟라이트 + 탭 펄스 / 드래그 스와이프 (손 없음·토이톤) ===== */
+  #ob-overlay{ position:fixed; inset:0; z-index:120; pointer-events:none; opacity:0; display:none; transition:opacity .35s; }
   #ob-overlay.show{ opacity:1; display:block; }
-  #ob-text{ position:absolute; left:0; right:0; top:14%; text-align:center; padding:0 30px;
+  /* 딤: 화면을 어둑하게 + 모델/대상문어 '구멍'(스팟라이트)으로 환하게. 텍스트·펄스는 딤 위(z-index:3). */
+  #ob-dim{ position:absolute; inset:0; background:rgba(7,11,20,.56); opacity:0; transition:opacity .35s; }
+  #ob-overlay.show #ob-dim{ opacity:1; }
+  #ob-overlay.step-tap #ob-dim{
+    -webkit-mask: radial-gradient(ellipse 45% 23% at 50% 30%, transparent 56%, #000 100%), radial-gradient(circle 56px at var(--ox,50%) var(--oy,74%), transparent 44%, #000 96%);
+    -webkit-mask-composite: source-in;
+    mask: radial-gradient(ellipse 45% 23% at 50% 30%, transparent 56%, #000 100%), radial-gradient(circle 56px at var(--ox,50%) var(--oy,74%), transparent 44%, #000 96%);
+    mask-composite: intersect; }
+  #ob-overlay.step-drag #ob-dim{
+    -webkit-mask: radial-gradient(ellipse 51% 30% at 50% 33%, transparent 64%, #000 100%);
+    mask: radial-gradient(ellipse 51% 30% at 50% 33%, transparent 64%, #000 100%); }
+  #ob-text{ position:absolute; left:0; right:0; top:13%; text-align:center; padding:0 30px; z-index:3;
     font:800 23px/1.34 -apple-system,'Baloo 2',BlinkMacSystemFont,'Segoe UI',sans-serif; color:#fff; letter-spacing:.2px;
-    text-shadow:0 3px 0 #16304f, 0 1px 0 #16304f, 0 0 14px rgba(0,0,0,.4); }
-  /* 탭: 중앙 말랑 펄(점) + 확산 링 2개(소프트·외곽선 없음). 앞줄 가운데 문어에 정렬. */
-  #ob-tap{ position:absolute; left:50%; top:73.5%; transform:translate(-50%,-50%); display:none; }
+    text-shadow:0 3px 0 #16304f, 0 1px 0 #16304f, 0 0 16px rgba(0,0,0,.6); }
+  /* 탭: 말랑 펄 + 확산 링 — updateOctoNumbers 가 앞줄 가운데 문어 머리로 매 프레임 정렬(left/top px). */
+  #ob-tap{ position:absolute; left:50%; top:74%; transform:translate(-50%,-50%); display:none; z-index:3; }
   #ob-overlay.step-tap #ob-tap{ display:block; }
-  #ob-tap .dot{ position:absolute; left:-17px; top:-17px; width:34px; height:34px; border-radius:50%;
+  #ob-tap .dot{ position:absolute; left:-16px; top:-16px; width:32px; height:32px; border-radius:50%;
     background:radial-gradient(circle at 38% 30%, #ffffff, #fff0cf 62%, #ffd98c);
     box-shadow:0 4px 9px rgba(0,0,0,.30), inset 0 1px 2px rgba(255,255,255,.95); animation:ob-dot 1.25s ease-in-out infinite; }
-  #ob-tap .rip{ position:absolute; left:-29px; top:-29px; width:58px; height:58px; border-radius:50%;
-    border:4px solid rgba(255,255,255,.96); box-shadow:0 0 12px rgba(255,255,255,.55); animation:ob-rip 1.25s ease-out infinite; }
+  #ob-tap .rip{ position:absolute; left:-28px; top:-28px; width:56px; height:56px; border-radius:50%;
+    border:4px solid rgba(255,255,255,.96); box-shadow:0 0 12px rgba(255,255,255,.6); animation:ob-rip 1.25s ease-out infinite; }
   #ob-tap .rip.r2{ animation-delay:.55s; }
   @keyframes ob-dot{ 0%,100%{ transform:scale(1);} 44%{ transform:scale(.70);} }
   @keyframes ob-rip{ 0%{ transform:scale(.42); opacity:0;} 20%{ opacity:.95;} 100%{ transform:scale(1.8); opacity:0;} }
-  /* 드래그: 가운데 말랑 퍽이 좌우 슬라이드 + 양옆 셰브론(손 없음). */
-  #ob-swipe{ position:absolute; left:50%; top:45%; transform:translate(-50%,-50%); width:210px; height:56px; display:none; }
+  /* 드래그: 가운데 말랑 퍽 좌우 슬라이드 + 양옆 셰브론(손 없음). */
+  #ob-swipe{ position:absolute; left:50%; top:43%; transform:translate(-50%,-50%); width:210px; height:56px; display:none; z-index:3; }
   #ob-overlay.step-drag #ob-swipe{ display:block; }
   #ob-swipe .puck{ position:absolute; left:50%; top:50%; width:36px; height:36px; margin:-18px 0 0 -18px; border-radius:50%;
     background:radial-gradient(circle at 38% 30%, #ffffff, #fff0cf 62%, #ffd98c);
@@ -4769,6 +4780,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     </div>
   </div>
 <div id="ob-overlay" aria-hidden="true">
+    <div id="ob-dim"></div>
     <div id="ob-text"></div>
     <div id="ob-tap"><span class="rip"></span><span class="rip r2"></span><span class="dot"></span></div>
     <div id="ob-swipe"><span class="chev l"></span><span class="puck"></span><span class="chev r"></span></div>
@@ -7358,6 +7370,16 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
         if (s.classList.contains('qfrost')) s.classList.remove('qfrost');   // 옛 얼음칩 스타일 제거(흰 숫자로 통일)
         setOctoNumText(s, frozenNow ? item.meltCount : item.bullets);
       } else { s.style.display='none'; }
+    }
+    // 온보딩: 탭 펄스 + 딤 스팟라이트를 '앞줄(row0) 가운데 문어' 머리에 매 프레임 정렬(숫자배지와 동일 투영 → 항상 딱 맞음)
+    if (_obStep===1){
+      var _otc=Math.floor(((typeof QUEUE!=='undefined'&&QUEUE.cols)?QUEUE.cols:3)/2), _ot=null;
+      for (var oi=0;oi<queueOctos.length;oi++){ var oq=queueOctos[oi]; if(oq&&oq.row===0&&oq.octo){ if(!_ot)_ot=oq; if(oq.col===_otc){_ot=oq;break;} } }
+      if (_ot){ _ot.octo.getWorldPosition(_vp); _vp.project(viewCam);
+        var _ox=(_vp.x*0.5+0.5)*DESIGN_W, _oy=(-_vp.y*0.5+0.5)*DESIGN_H;
+        var _te=document.getElementById('ob-tap'); if(_te){ _te.style.left=_ox.toFixed(1)+'px'; _te.style.top=_oy.toFixed(1)+'px'; }
+        var _de=document.getElementById('ob-dim'); if(_de){ _de.style.setProperty('--ox',_ox.toFixed(1)+'px'); _de.style.setProperty('--oy',_oy.toFixed(1)+'px'); }
+      }
     }
   }
   // ===== 묶인 문어(linked octopuses) 바벨 커넥터 =====
@@ -11164,22 +11186,10 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   var OB_KEY='cb_onboard_done';
   function obReset(){ try{ localStorage.removeItem(OB_KEY); }catch(e){} }   // 데모/테스트 초기화(데모 부팅에서 사용)
   window.__obReset=obReset;
-  function obPositionTap(){
-    // 탭 펄스를 앞줄(row 0) 가운데 컬럼 문어의 '실제 화면 위치'에 정렬 — 큐 숫자배지와 동일한 투영(DESIGN 좌표).
-    try{
-      var el=document.getElementById('ob-tap'); if(!el || _obStep!==1) return;
-      var mid=Math.floor(((typeof QUEUE!=='undefined' && QUEUE.cols)?QUEUE.cols:3)/2), target=null;
-      for (var i=0;i<queueOctos.length;i++){ var q=queueOctos[i];
-        if (q && q.row===0 && q.octo){ if(!target) target=q; if(q.col===mid){ target=q; break; } } }
-      if (!target) return;
-      target.octo.getWorldPosition(_vp); _vp.project(viewCam);
-      el.style.left=((_vp.x*0.5+0.5)*DESIGN_W).toFixed(1)+'px';
-      el.style.top=((-_vp.y*0.5+0.5)*DESIGN_H).toFixed(1)+'px';
-    }catch(e){}
-  }
   function obRender(){
+    // 펄스/딤 위치는 updateOctoNumbers(매 프레임)가 '앞줄 가운데 문어'에 정렬한다. 여기선 단계/텍스트만.
     var ov=document.getElementById('ob-overlay'), tx=document.getElementById('ob-text'); if(!ov) return;
-    if (_obStep===1){ ov.className='show step-tap'; if(tx) tx.textContent='Tap the octopus to shoot!'; obPositionTap(); setTimeout(obPositionTap,160); setTimeout(obPositionTap,480); }
+    if (_obStep===1){ ov.className='show step-tap'; if(tx) tx.textContent='Tap the octopus to shoot!'; }
     else if (_obStep===2){ ov.className='show step-drag'; if(tx) tx.textContent='Drag to spin & uncover hidden colors!'; }
     else { ov.className=''; }
   }
