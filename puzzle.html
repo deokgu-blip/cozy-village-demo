@@ -4577,16 +4577,15 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   #ob-overlay{ position:fixed; inset:0; z-index:120; pointer-events:none; opacity:0; display:none; transition:opacity .35s; }
   #ob-overlay.show{ opacity:1; display:block; }
   /* 딤: 화면을 어둑하게 + 모델/대상문어 '구멍'(스팟라이트)으로 환하게. 텍스트·펄스는 딤 위(z-index:3). */
-  #ob-dim{ position:absolute; inset:0; background:rgba(7,11,20,.56); opacity:0; transition:opacity .35s; }
+  #ob-dim{ position:absolute; inset:0; opacity:0; transition:opacity .35s; }
   #ob-overlay.show #ob-dim{ opacity:1; }
+  /* 모델(위쪽)은 딤 안 함 → 어둑한 그리드 위로 환하게 떠 보임(스팟라이트 원 없음). 탭 단계는 대상 문어에 스팟라이트 구멍. */
   #ob-overlay.step-tap #ob-dim{
-    -webkit-mask: radial-gradient(ellipse 45% 23% at 50% 30%, transparent 56%, #000 100%), radial-gradient(circle 56px at var(--ox,50%) var(--oy,74%), transparent 44%, #000 96%);
-    -webkit-mask-composite: source-in;
-    mask: radial-gradient(ellipse 45% 23% at 50% 30%, transparent 56%, #000 100%), radial-gradient(circle 56px at var(--ox,50%) var(--oy,74%), transparent 44%, #000 96%);
-    mask-composite: intersect; }
+    background:linear-gradient(to bottom, transparent 43%, rgba(6,10,18,.62) 64%);
+    -webkit-mask: radial-gradient(circle 56px at var(--ox,50%) var(--oy,74%), transparent 44%, #000 86%);
+    mask: radial-gradient(circle 56px at var(--ox,50%) var(--oy,74%), transparent 44%, #000 86%); }
   #ob-overlay.step-drag #ob-dim{
-    -webkit-mask: radial-gradient(ellipse 51% 30% at 50% 33%, transparent 64%, #000 100%);
-    mask: radial-gradient(ellipse 51% 30% at 50% 33%, transparent 64%, #000 100%); }
+    background:linear-gradient(to bottom, transparent 55%, rgba(6,10,18,.6) 76%); }
   #ob-text{ position:absolute; left:0; right:0; top:13%; text-align:center; padding:0 30px; z-index:3;
     font:800 23px/1.34 -apple-system,'Baloo 2',BlinkMacSystemFont,'Segoe UI',sans-serif; color:#fff; letter-spacing:.2px;
     text-shadow:0 3px 0 #16304f, 0 1px 0 #16304f, 0 0 16px rgba(0,0,0,.6); }
@@ -4779,13 +4778,14 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       <div id="clear-tap" data-edit-id="clear-tap">Tap to Next Stage</div>
     </div>
   </div>
-<div id="ob-overlay" aria-hidden="true">
-    <div id="ob-dim"></div>
-    <div id="ob-text"></div>
-    <div id="ob-tap"><span class="rip"></span><span class="rip r2"></span><span class="dot"></span></div>
-    <div id="ob-swipe"><span class="chev l"></span><span class="puck"></span><span class="chev r"></span></div>
-  </div>
 </div><!-- /#fit-root -->
+<!-- 온보딩 오버레이는 fit-root(트랜스폼) 밖 = 뷰포트 고정 → getBoundingClientRect(뷰포트 px)로 문어에 정확히 정렬 -->
+<div id="ob-overlay" aria-hidden="true">
+  <div id="ob-dim"></div>
+  <div id="ob-text"></div>
+  <div id="ob-tap"><span class="rip"></span><span class="rip r2"></span><span class="dot"></span></div>
+  <div id="ob-swipe"><span class="chev l"></span><span class="puck"></span><span class="chev r"></span></div>
+</div>
 <!-- ODG_REGION_END: markup -->
 
 <!-- ODG_REGION: game-config -->
@@ -7371,14 +7371,16 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
         setOctoNumText(s, frozenNow ? item.meltCount : item.bullets);
       } else { s.style.display='none'; }
     }
-    // 온보딩: 탭 펄스 + 딤 스팟라이트를 '앞줄(row0) 가운데 문어' 머리에 매 프레임 정렬(숫자배지와 동일 투영 → 항상 딱 맞음)
+    // 온보딩: 탭 펄스/딤 스팟라이트를 '앞줄(row0) 가운데 문어'의 숫자배지 위치(=게임이 직접 문어 머리에 얹은 좌표)에 그대로 정렬.
+    //   내가 재투영하면 가로로 넓은 화면비율에서 어긋남 → 배지(queueNumSpans)의 실제 DESIGN 좌표를 복사(어떤 비율이든 항상 문어에 딱).
     if (_obStep===1){
-      var _otc=Math.floor(((typeof QUEUE!=='undefined'&&QUEUE.cols)?QUEUE.cols:3)/2), _ot=null;
-      for (var oi=0;oi<queueOctos.length;oi++){ var oq=queueOctos[oi]; if(oq&&oq.row===0&&oq.octo){ if(!_ot)_ot=oq; if(oq.col===_otc){_ot=oq;break;} } }
-      if (_ot){ _ot.octo.getWorldPosition(_vp); _vp.project(viewCam);
-        var _ox=(_vp.x*0.5+0.5)*DESIGN_W, _oy=(-_vp.y*0.5+0.5)*DESIGN_H;
-        var _te=document.getElementById('ob-tap'); if(_te){ _te.style.left=_ox.toFixed(1)+'px'; _te.style.top=_oy.toFixed(1)+'px'; }
-        var _de=document.getElementById('ob-dim'); if(_de){ _de.style.setProperty('--ox',_ox.toFixed(1)+'px'); _de.style.setProperty('--oy',_oy.toFixed(1)+'px'); }
+      var _r0=[];   // row0(앞줄) 보이는 배지들의 '뷰포트 픽셀' 좌표(getBoundingClientRect → 트랜스폼 무관·모든 화면비율 정확)
+      for (var oi=0;oi<queueNumSpans.length;oi++){ var oq=queueOctos[oi], sp=queueNumSpans[oi];
+        if (oq&&oq.row===0&&oq.octo&&sp&&sp.style.display!=='none'){ var rc=sp.getBoundingClientRect(); if(rc.width>0) _r0.push({x:rc.left+rc.width/2, y:rc.top+rc.height/2}); } }
+      if (_r0.length){ _r0.sort(function(a,b){return a.x-b.x;}); var _mid=_r0[(_r0.length-1)>>1];
+        var _px=_mid.x, _py=_mid.y+18;   // 배지=머리 → 몸통 중심으로 살짝 내림(뷰포트 px)
+        var _te=document.getElementById('ob-tap'); if(_te){ _te.style.left=_px.toFixed(1)+'px'; _te.style.top=_py.toFixed(1)+'px'; }
+        var _de=document.getElementById('ob-dim'); if(_de){ _de.style.setProperty('--ox',_px.toFixed(1)+'px'); _de.style.setProperty('--oy',_py.toFixed(1)+'px'); }
       }
     }
   }
