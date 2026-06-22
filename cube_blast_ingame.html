@@ -3744,6 +3744,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
      · #hud-top 의 에디터 베이크(아래로 ~39px 이동, 로비 튜닝)를 릴스에선 무력화 → HUD 를 화면 최상단으로 끌어올림.
      · --safe-top = max(env, 48px) 노치 reserve 만큼만 내림 → 코인·레벨이 노치/다이내믹아일랜드(≈59px) 바로 아래. */
   body.solo, body.gamereels { --safe-top: max(env(safe-area-inset-top, 0px), 52px); }
+  body.reels { --safe-top: 0px !important; }   /* 릴스 호스트(?reels|?gamereels): 상단 여백 제거 — 게임플레이 위쪽 여백 금지 */
   body.solo #hud-top, body.gamereels #hud-top { transform: none !important; }
 
   :root {
@@ -7091,6 +7092,33 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   const IS_SOLO = (function(){ try{ return !!window.__SOLO || /[?&]solo\b/.test(location.search); }catch(e){ return false; } })();
   try{ if (IS_SOLO && document.body) document.body.classList.add('solo'); }catch(e){}
 
+  // ===== 릴스/배포 런타임 설정 (URL 파라미터 > 기본값, 로드 1회 확정 — /simo 13-feature-layers §B) =====
+  //   ?from=N : 시작 레벨(없으면 로비 이어하기/1)    ?to=M : 종료 레벨(그 레벨 클리어 후 더 진행 안 함)
+  //   ?gamereels|?reels : 릴스 호스트(상단 여백 0 + GameEnd 를 30레벨 배수/구간끝에서만)    ?dev : 개발자 네비 즉시 표시
+  //   기본값=기존값 → 파라미터 없으면 회귀 0(기존 단독/APK 동작 그대로).
+  const RT = (function(){
+    var MAX = (typeof STAGES!=='undefined' && STAGES.length) ? STAGES.length : 105;
+    var q; try{ q=new URLSearchParams(location.search); }catch(e){ q=new URLSearchParams(''); }
+    function clampL(v, d){ v=parseInt(v,10); if(!isFinite(v)) return d; return Math.max(1, Math.min(MAX, v)); }
+    var from = clampL(q.get('from')!=null ? q.get('from') : q.get('level'), 1);
+    var to   = clampL(q.get('to'), MAX);
+    if (from > to) to = from;                          // from>to 면 단일 레벨로 정규화
+    var reels=false, dev=false;
+    try{ reels = !!window.__GAMEREELS || /[?&](gamereels|reels)\b/.test(location.search); }catch(e){}
+    try{ dev   = !!window.__DEV || /[?&]dev\b/.test(location.search); }catch(e){}
+    return { from:from, to:to, MAX:MAX, reels:reels, dev:dev, limited:(from>1||to<MAX) };
+  })();
+  try{ if (RT.reels && document.body) document.body.classList.add('reels'); }catch(e){}   // 릴스: 상단 여백 0(body.reels CSS)
+  // GameEnd 발신 정책(한 곳) — /simo §B 우선순위. reels: 30배수 또는 구간끝(to)에서만. 비-reels: 매 클리어(기존, 회귀 0).
+  function shouldEmitGameEnd(level){
+    level = level|0;
+    if (!RT.reels) return true;                 // 기존 단독/APK: 매 클리어 emit
+    if (level % 30 === 0) return true;          // 30레벨 배수마다(릴스 마일스톤)
+    if (level >= RT.to) return true;            // 구간 종료 레벨
+    return false;
+  }
+  try{ window.__RT = RT; window.__shouldEmitGameEnd = shouldEmitGameEnd; }catch(e){}   // 호스트/QA 디버그: 릴스 설정·신호정책 조회(읽기전용)
+
   // ===== gamereels 웹뷰 호스트 postMessage 계약 (단독/릴스 빌드 전용) =====
   //  근거: /simo skill 13-feature-layers.md §A — flutter_inappwebview 단일 채널.
   //   · 게임→앱: GameStart / started / luna:started(로딩 완료), GameEnd("success"|"fail"),
@@ -7130,7 +7158,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       [300,800,1600,3000,5000].forEach(function(ms){ try{ setTimeout(_emitStart, ms); }catch(e){} });
     }
     // 호스트 규격: GameEnd 의 data = 객체 { success:bool, progressIndex:int }. (success=클리어 여부, progressIndex=1-based 스테이지 번호 — 호출부에서 stageIndex+1 로 전달)
-    function gameEnd(success, progressIndex){ emit('GameEnd', { success: !!success, progressIndex: progressIndex|0 }); }
+    function gameEnd(success, level){ emit('GameEnd', { success: !!success, progressIndex: level|0, currentIndex: level|0 }); }   // 호스트 규격: success + progressIndex/currentIndex(=현재 레벨, 1-based) 동봉
     var VMAP={ selection:'SoftVibrate', light:'LightVibrate', medium:'MediumVibrate', heavy:'MediumVibrate' };
     function vibrate(level){ emit(VMAP[level]||'LightVibrate'); }
     function setPaused(p){
@@ -9041,6 +9069,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     shakeT=GAME_CONFIG.SHAKE_DURATION;
     playerScoreVal++;
     comboCount++; comboTimer=0.7;
+    if (comboCount>0 && comboCount%10===0){ try{ haptic('medium'); }catch(e){} }   // ★ 연속 파괴 10단위 = 콤보 타격감(중간 햅틱)
     // 콤보 텍스트 출력 제거(사용자 요청) — comboCount는 내부 카운트만 유지
   }
   function showCombo(n){
@@ -9159,6 +9188,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   }
   function onCannonDepleted(c, force){
     if (c.fadeT!==undefined) return;       // 중복 트리거 방지
+    try{ haptic('light'); }catch(e){}      // ★ 옥토 1마리 소진(슬롯 비워짐) = 만족 햅틱
     if (!force && c.linkId!=null){
       const grp=_linkGroupMembers(c.linkId);
       // 그룹원이 슬롯에 아직 둘 이상 있고, 전원이 0(+inflight 0)이 아니면 페이드 보류(멤버는 그 자리에 머묾).
@@ -9370,7 +9400,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     playSfx('sfx_win');   // 결과창("Well Done") 등장음 — 부드러운 클리어 사운드
     _confettiRAFLoop();
     // gamereels: 클리어 연출(타이틀/컨페티)이 뜬 뒤 성공 신호 — 연출 다 끝난 시점에 호스트가 CTA 띄울 수 있게 지연 emit.
-    try{ if (GR.active){ var _grPi=stageIndex+1; setTimeout(function(){ GR.gameEnd(true, _grPi); }, 700); } }catch(e){}   // 클리어=success:true, progressIndex=1-based 스테이지 번호(클리어 시점 캡처 — 타임아웃 중 다음스테이지로 안 바뀌게)
+    try{ haptic('heavy'); }catch(e){}   // ★ 클리어 타격감(만족감) — 강한 햅틱
+    try{ if (GR.active){ var _grPi=stageIndex+1; if (shouldEmitGameEnd(_grPi)) setTimeout(function(){ GR.gameEnd(true, _grPi); }, 700); } }catch(e){}   // 클리어 성공 신호: reels 면 30배수/구간끝(to)에서만, 그 외 매 클리어. progressIndex/currentIndex=현재 레벨
     flushMilestoneToasts();   // Wave2-A: 이번 클리어로 넘은 디오라마 마일스톤 보상 팝업(있으면 순차)
     // 중복 방지: 이전 클리어에서 남은 핸들러 제거 + once 가드(탭/합성 이벤트 중복 발화 차단)
     if (_clearTapHandler){ elClearOverlay.removeEventListener('pointerdown', _clearTapHandler); _clearTapHandler=null; }
@@ -10956,6 +10987,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   // 다음 스테이지 진입(디오라마 제작 후 호출). ✨ 곧 로드될 스테이지에 '처음 보는 기믹'이 있으면
   //   New Item 튜토리얼을 먼저(순차) 띄우고, 탭으로 닫힌 뒤 인게임을 로드한다(데모 모드/검증 흐름은 우회).
   function nextStage(){
+    if (RT.to < RT.MAX && (stageIndex+1) >= RT.to){ return; }   // ?to: 그 레벨 클리어 후 릴스 종료(GameEnd 는 showStageClear 에서 발신). 미지정 시 기존대로 진행
     const nextIdx=(stageIndex+1)%STAGES.length;
     if (!_demoStage){
       try{
@@ -12735,6 +12767,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
         _toggleDev();
       }
     });
+    try{ if (RT && RT.dev) _toggleDev(); }catch(e){}   // ?dev: 개발자 네비(스테이지 이전/다음) 즉시 표시
   }
 
   function boot(){
@@ -12750,7 +12783,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     applyDiorama();
     initCoins();          // 저장된 코인(META.coins) 반영 or 현재 표시값 파싱
     document.getElementById('loading').classList.add('hidden');
-    loadStage(Math.max(0, Math.min(STAGES.length-1, (META.level||1)-1)));   // 로비에서 넘겨준 레벨로 이어하기(없으면 1)
+    var _startLv = (RT.from>1) ? RT.from : (META.level||1);   // ?from 지정 시 그 레벨부터 시작, 아니면 기존(로비 이어하기/1)
+    loadStage(Math.max(0, Math.min(STAGES.length-1, _startLv-1)));
     requestAnimationFrame(gameLoop);
     try{ GR.gameStart(); }catch(e){}   // gamereels: 로딩 완료 → GameStart/started/luna:started (단독/릴스 빌드만)
     try{ initSoloStageNav(); }catch(e){}   // ★ 개발자 모드(지침 L59): 전 빌드 기본 포함. Q(데스크톱)/좌상단 3탭(모바일) 토글. 평소 숨김.
