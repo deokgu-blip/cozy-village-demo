@@ -4837,8 +4837,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     GAP: { selection:50, light:60 }                        // 스로틀(ms): 모터 과부하/연사 방지
   };
   const _hapticLast = {};
-  function haptic(level){
+  function haptic(level, core){
     if (!HAPTIC.enabled) return;
+    if (!core) return;   // ★ 햅틱은 '복셀 깨짐(removeVoxel)'·'문어 배치(sfx_place)' 두 코어 이벤트만 재생(사용자 지침 2026-06-22). 그 외 호출은 무음.
     try{ if (GR && GR.active) GR.vibrate(level); }catch(e){}   // gamereels: 진동을 호스트에 위임(Soft/Light/MediumVibrate 신호). 아래 네이티브/웹 폴백은 비-호스트용으로 유지.
     const gap = HAPTIC.GAP[level] || 0;
     if (gap){
@@ -9063,13 +9064,12 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       return;   // 아직 안 부서짐: 카운트/콤보 증가 없음(removeVoxel 안 함 → activeVoxelCount 불변)
     }
     removeVoxel(v);
-    haptic('selection'); playSfx('sfx_pop');   // 블록 1개 깨질 때마다(가장 빈번) = 굉장히 약한 햅틱(스로틀로 연사 방지)
+    haptic('light', true); playSfx('sfx_pop');   // ★ 복셀 깨질 때 = 약(light) 코어 햅틱(스로틀로 연사 방지)
     spawnParticles(_v3, v.hex);   // 큐브 부스러기(보셀과 같은 색) 흩뿌리기
     // 흰색 플래시 제거(사용자 요청)
     shakeT=GAME_CONFIG.SHAKE_DURATION;
     playerScoreVal++;
     comboCount++; comboTimer=0.7;
-    if (comboCount>0 && comboCount%10===0){ try{ haptic('medium'); }catch(e){} }   // ★ 연속 파괴 10단위 = 콤보 타격감(중간 햅틱)
     // 콤보 텍스트 출력 제거(사용자 요청) — comboCount는 내부 카운트만 유지
   }
   function showCombo(n){
@@ -9188,7 +9188,6 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   }
   function onCannonDepleted(c, force){
     if (c.fadeT!==undefined) return;       // 중복 트리거 방지
-    try{ haptic('light'); }catch(e){}      // ★ 옥토 1마리 소진(슬롯 비워짐) = 만족 햅틱
     if (!force && c.linkId!=null){
       const grp=_linkGroupMembers(c.linkId);
       // 그룹원이 슬롯에 아직 둘 이상 있고, 전원이 0(+inflight 0)이 아니면 페이드 보류(멤버는 그 자리에 머묾).
@@ -9400,7 +9399,6 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     playSfx('sfx_win');   // 결과창("Well Done") 등장음 — 부드러운 클리어 사운드
     _confettiRAFLoop();
     // gamereels: 클리어 연출(타이틀/컨페티)이 뜬 뒤 성공 신호 — 연출 다 끝난 시점에 호스트가 CTA 띄울 수 있게 지연 emit.
-    try{ haptic('heavy'); }catch(e){}   // ★ 클리어 타격감(만족감) — 강한 햅틱
     try{ if (GR.active){ var _grPi=stageIndex+1; if (shouldEmitGameEnd(_grPi)) setTimeout(function(){ GR.gameEnd(true, _grPi); }, 700); } }catch(e){}   // 클리어 성공 신호: reels 면 30배수/구간끝(to)에서만, 그 외 매 클리어. progressIndex/currentIndex=현재 레벨
     flushMilestoneToasts();   // Wave2-A: 이번 클리어로 넘은 디오라마 마일스톤 보상 팝업(있으면 순차)
     // 중복 방지: 이전 클리어에서 남은 핸들러 제거 + once 가드(탭/합성 이벤트 중복 발화 차단)
@@ -9408,6 +9406,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     let _fired=false;
     const tapHandler = (e) => {
       if (_fired) return; _fired=true;                          // 동일 클리어 1회만
+      try{ haptic('light', true); }catch(_e){}                  // ★ 결과창 버튼(탭) 햅틱
       e.preventDefault(); e.stopPropagation();
       elClearOverlay.classList.remove('show');
       elClearOverlay.removeEventListener('pointerdown', tapHandler);
@@ -11649,7 +11648,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       slots[slot]=c;
     }
     firstDeployDone=true;
-    haptic('light'); playSfx('sfx_place');
+    haptic('medium', true); playSfx('sfx_place');
     renderQueue(); renderSlots(); renderPowerups();
     return true;
   }
@@ -11678,7 +11677,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     slots[base]=c;
     slots[base+1]={ isWideTail:true, head:c, slotIndex:base+1, bullets:0, color:c.color };   // 꼬리 placeholder
     firstDeployDone=true;
-    haptic('light'); playSfx('sfx_place');
+    haptic('medium', true); playSfx('sfx_place');
     renderQueue(); renderSlots(); renderPowerups();
     return true;
   }
@@ -11726,7 +11725,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     slots[slot]=c; firstDeployDone=true; _deployCount++;
     _melt();   // 🧊 아무 옥토 배치 성공 → '큐에 보이는' 모든 얼음 옥토 meltCount 1씩 차감
     _healFrontRowDeadlock();   // 🧊 이번 배치로 앞줄이 전부 frozen 이 됐으면 즉시 치유(소프트락 방지, 프레임 지연 없음)
-    haptic('light'); playSfx('sfx_place');   // 문어를 슬롯에 올릴 때(탭 배치) = 약한 햅틱
+    haptic('medium', true); playSfx('sfx_place');   // 문어를 슬롯에 올릴 때(탭 배치) = 약한 햅틱
     renderQueue(); renderSlots(); renderPowerups();
     _checkLockKeyUnlock();   // 🔒🔑 슬롯 줄에 KEY+LOCK 이 함께 있으면 1:1 로 짝지어 둘 다 제거(슬롯 해제)
     return true;
