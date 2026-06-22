@@ -2301,7 +2301,7 @@ window.__LOBBY_MODELS={};</script>
       //   {type:'window.message', data:{event,data}, origin} 으로 감싸졌다. 단일 핸들러에 단일 {event,data} 객체를
       //   보내면 감싸짐 없이 호스트가 { event, data } 그대로 받는다. (핸들러 이름이 다르면 알려주면 변경.)
       try{ if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler){
-        window.flutter_inappwebview.callHandler('gamereels', msg);
+        window.flutter_inappwebview.callHandler('flutterChannel', msg);   // ★ 호스트 등록 핸들러명(개발자 확인 2026-06-22): flutterChannel
       } }catch(e){}
       // 명명 브리지 객체(호스트 주입 가능)
       try{ if (window.GameReels && window.GameReels.post) window.GameReels.post(event, data); }catch(e){}
@@ -5421,6 +5421,46 @@ window.__LOBBY_MODELS={};</script>
     _autoDeployRRCol=0; _deployCount=0; _autoDeployTimer=0;   // 🧊 frozen 해동 카운터 리셋
     idleTimer=0; firstDeployDone=false; modeSwitchGrace=0;
     comboCount=0; resetModelRot();   // 앞면이 카메라를 향하도록 시작(뒤집힘 방지)
+    // ★ PRE-PLACED OCTOPUS (난이도): st.preplace=K 면 시작 시점에 '묻힌 색'(활성 복셀은 있으나 시작 노출이 없어
+    //   발사 불가) 옥토를 큐→슬롯으로 K개까지 미리 앉힌다. 빈 슬롯이 줄어 즉시 슬롯 압박 + 멍하니 채우면 데드락 성립.
+    //   하지만 큐는 정상(앞줄에 표면색 접근 가능)이라 신중히 표면을 부수면 묻힌 색이 노출되어 발사→슬롯 해제→클리어.
+    //   ⚡불변: 큐→슬롯 '이동'만 한다(새 옥토 추가 아님) → 색별 Σbullets==Σvoxels 보존 → 클리어가능성 유지.
+    //   data-driven(st.preplace 없으면 무동작), 데모(_demoStage)에선 비활성.
+    if (!_demoStage){
+      const _pre=(st && (st.preplace|0)>0) ? (st.preplace|0) : 0;
+      if (_pre>0){
+        modelGroup.updateMatrixWorld(true); viewCam.updateMatrixWorld(true);   // pickTarget 가시판정에 필요한 월드행렬 확정
+        // '묻힌 색' 집합: 활성 복셀 있음 + 시작 시 노출(발사가능) 없음.
+        const _buried={};
+        for (const g in colorVoxelList){ if (colorHasAny(g) && pickTarget(g)===null) _buried[g]=true; }
+        let _placed=0; const _usedColors={};
+        outer:
+        for (let _k=0; _k<_pre; _k++){
+          const _slot=firstEmptySlot(); if (_slot<0) break;   // 빈 슬롯 소진
+          // ★ 서로 다른 묻힌색 우선(2-pass): 같은색 3개 미리배치는 단색 슬롯압박이 과해 클리어 검증 실패(57·77).
+          //   pass0=아직 안 쓴 묻힌색만(분산), pass1=아무 묻힌색. lock/key/wide/frozen/링크 제외(순수 옥토만).
+          for (let _pass=0; _pass<2; _pass++){
+            for (let _c=0; _c<cols.length; _c++){
+              const _col=cols[_c];
+              for (let _r=0; _r<_col.length; _r++){
+                const _sp=_col[_r];
+                if (!_sp || _sp.kind!=='octo') continue;
+                if (_sp.linkGroupKey || _sp.wide || _sp.frozen) continue;
+                if (!_buried[_sp.color]) continue;
+                if (_pass===0 && _usedColors[_sp.color]) continue;   // pass0: 새 색만
+                _col.splice(_r,1);   // 큐에서 빼서
+                const _cn=makeCannon(_sp); _cn.slotIndex=_slot; _cn.deploying=false; _cn.flyT=0;
+                _cn.octo=makeOcto(_cn.color, _slot);
+                if (_cn.octo){ _cn.octo.position.set(octoLocalX(_slot), slotOctoY(), -OCTO.dist); _cn.octo.scale.setScalar(OCTO.scale); }
+                slots[_slot]=_cn; _placed++; _usedColors[_sp.color]=true;
+                continue outer;   // 다음 K
+              }
+            }
+          }
+          break;   // 묻힌색 옥토 더 없음 → 가능한 만큼만(에러 아님)
+        }
+      }
+    }
     phase='playing';
     clearResult();
     hideStageClear();   // 다음 스테이지 시작 시 클리어 오버레이 제거
@@ -5513,6 +5553,7 @@ window.__LOBBY_MODELS={};</script>
       //   (배경 RAF 가 실시간으로 모델을 돌리면 평가 호출 사이 회전 위상이 들쭉날쭉 → 같은 레벨이 비결정적으로 갈림).
       window.__setAutoRotate = (b) => { GAME_CONFIG.AUTO_ROTATE = !!b; return GAME_CONFIG.AUTO_ROTATE; };
       window.__dbgGoStage = (i) => loadStage(i);   // 스테이지 점프(검증용)
+      window.__stagePreplace = (i) => { const s=STAGES[((i%STAGES.length)+STAGES.length)%STAGES.length]; return s?(s.preplace|0):0; };   // 선배치 K 데이터값(스모크 기대치)
       // ✨ 튜토리얼 검증용: 실 STAGES 에서 기믹을 가진 스테이지 목록 + nextStage 게이트 시뮬(닫힌 STAGES 접근).
       window.__realGimmickStages = () => { const out=[]; for(let i=0;i<STAGES.length;i++){ const g=detectStageGimmicks(STAGES[i]); if(g.length) out.push({lvl:i+1,name:STAGES[i].name,gimmicks:g}); } return out; };
       window.__nextStageGate = (curLvl) => { const ni=(curLvl)%STAGES.length; const st=STAGES[ni]; const seen=_tutSeen(); const unseen=detectStageGimmicks(st).filter(k=>!seen.has(k)); if(unseen.length){ showTutorials(unseen, ()=>{ window.__tutEntered=true; }); window.__tutEntered=false; } else { window.__tutEntered=true; } return { nextLvl:ni+1, name:st.name, unseen }; };
@@ -7868,11 +7909,19 @@ window.__LOBBY_MODELS={};</script>
     prev.addEventListener('click', function(e){ e.stopPropagation(); go(-1); });
     next.addEventListener('click', function(e){ e.stopPropagation(); go(1); });
     var taps=0, last=0;
-    hit.addEventListener('click', function(){
+    function _toggleDev(){ var show=(bar.style.display==='none'); bar.style.display=show?'flex':'none'; window.__devMode=show; if(show) upd(); }
+    hit.addEventListener('click', function(){     // 모바일/터치: 좌상단 3연속 탭
       var now = Date.now();
       if (now - last > 1200) taps = 0;
       last = now; taps++;
-      if (taps >= 3){ taps = 0; var show = (bar.style.display === 'none'); bar.style.display = show ? 'flex' : 'none'; if (show) upd(); }
+      if (taps >= 3){ taps = 0; _toggleDev(); }
+    });
+    // ★ 개발자 모드(지침 L59): 키보드 Q 로 진입/탈출(데스크톱). 평소 숨김. window.__devMode 플래그.
+    window.addEventListener('keydown', function(e){
+      if ((e.key==='q'||e.key==='Q') && !e.metaKey && !e.ctrlKey && !e.altKey){
+        var t=e.target; if (t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
+        _toggleDev();
+      }
     });
   }
 
@@ -7892,7 +7941,7 @@ window.__LOBBY_MODELS={};</script>
     loadStage(Math.max(0, Math.min(STAGES.length-1, (META.level||1)-1)));   // 로비에서 넘겨준 레벨로 이어하기(없으면 1)
     requestAnimationFrame(gameLoop);
     try{ GR.gameStart(); }catch(e){}   // gamereels: 로딩 완료 → GameStart/started/luna:started (단독/릴스 빌드만)
-    try{ if (IS_SOLO) initSoloStageNav(); }catch(e){}   // 단독/웹뷰: 좌상단 3클릭 → 스테이지 이전/다음 디버그 네비
+    try{ initSoloStageNav(); }catch(e){}   // ★ 개발자 모드(지침 L59): 전 빌드 기본 포함. Q(데스크톱)/좌상단 3탭(모바일) 토글. 평소 숨김.
     // ===== DEV-ONLY 에디터 API =====
     // window.__EDITOR 가 설정된 에디터 빌드에서만 노출. 배포물(__EDITOR 미설정)에선 죽은 분기 → 무영향(__dbg 패턴 동일).
     if (window.__EDITOR){
