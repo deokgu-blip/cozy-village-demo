@@ -7108,8 +7108,13 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     function _emit(event, data){
       if (data===undefined) data=null;                  // 호스트 규격: data 필드 항상 포함(없으면 null)
       var msg={ event:event, data:data };               // 페이로드 = { event, data } (timestamp 미포함 — 호스트가 {event,data} 형식을 기대)
-      // flutter_inappwebview 단일 채널(있으면 우선) — 호스트가 등록한 핸들러로 전달.
-      try{ if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) window.flutter_inappwebview.callHandler(event, data); }catch(e){}
+      // flutter_inappwebview 단일 채널(있으면 우선) — 'gamereels' 핸들러로 { event, data } 객체를 '그대로(flat)' 전달.
+      //   ★ 2026-06-22 수정: 기존 callHandler(event, data) 는 event 를 '핸들러 이름'으로 보내 호스트에서
+      //   {type:'window.message', data:{event,data}, origin} 으로 감싸졌다. 단일 핸들러에 단일 {event,data} 객체를
+      //   보내면 감싸짐 없이 호스트가 { event, data } 그대로 받는다. (핸들러 이름이 다르면 알려주면 변경.)
+      try{ if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler){
+        window.flutter_inappwebview.callHandler('gamereels', msg);
+      } }catch(e){}
       // 명명 브리지 객체(호스트 주입 가능)
       try{ if (window.GameReels && window.GameReels.post) window.GameReels.post(event, data); }catch(e){}
       // iOS WKWebView messageHandler 폴백
