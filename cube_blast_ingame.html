@@ -7185,14 +7185,94 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       if(!m || !m.event) return;
       if(m.event==='GamePause') setPaused(true);
       else if(m.event==='GameResume') setPaused(false);
+      // 진행상황 복원: 앱이 저장한 GameState/RestoreState 를 받으면 그 상태로 복원(앱 저장이 정본).
+      //   ★ applyGameState 는 GR IIFE 바깥(게임 메인 스코프)이라 window.__applyGameState 전역 브리지로 호출(직접참조 ReferenceError 방지 — G2 함정).
+      else if(m.event==='GameState' || m.event==='RestoreState'){ try{ if(window.__applyGameState) window.__applyGameState(m.data); }catch(e){} }
+      // 호스트가 현재 상태를 요청하면 즉시 GameState 발신.
+      else if(m.event==='RequestState'){ try{ if(window.__sendGameState) window.__sendGameState(); }catch(e){} }
     }
     try{ window.OnMessageFromFlutter=function(d){ _recv(d); }; }catch(e){}
-    try{ window.addEventListener('message', function(ev){ var d=ev&&ev.data; if(d && (d.event==='GamePause'||d.event==='GameResume')) _recv(d); }); }catch(e){}
+    try{ window.addEventListener('message', function(ev){ var d=ev&&ev.data; if(d && (d.event==='GamePause'||d.event==='GameResume'||d.event==='GameState'||d.event==='RestoreState'||d.event==='RequestState')) _recv(d); }); }catch(e){}
     try{ window.addEventListener('GamePause', function(){ setPaused(true); }); window.addEventListener('GameResume', function(){ setPaused(false); }); }catch(e){}
     return { active:true, emit:emit, gameStart:gameStart, gameEnd:gameEnd, vibrate:vibrate, setPaused:setPaused, isPaused:function(){return _paused;} };
   })();
   try{ window.__GR=GR; }catch(e){}   // 헤드리스 검증 훅(계약 신호 가시화)
   try{ if (GR.active && document.body) document.body.classList.add('gamereels'); }catch(e){}   // 상단 12svh 안전여백 등 릴스 빌드 스타일 게이트(solo 는 별도로 .solo 도 가짐)
+
+  // ===== GameState 동기화(게임 ↔ 앱 진행상황 저장/복원) =====================================
+  //  목적: 릴스/웹뷰 호스트(Flutter 앱)가 게임 진행도(클리어 스테이지·코인·부스터 인벤토리)를 저장하고
+  //        재실행 시 그 상태를 게임에 주입해 복원한다. 호스트(앱 저장)가 정본 — 릴스에선 localStorage 를 안 믿는다.
+  //  ★ 발신은 반드시 window.__GR 전역 브리지로(다른 <script> 스코프 직접참조 GR 은 ReferenceError 로 조용히 죽음 — G2 햅틱 함정과 동일).
+  //  ★ 발신 가드: window.__GR && window.__GR.active (릴스/호스트 컨텍스트에서만 — 로비 iframe/에디터는 inert).
+  //  페이로드 형식: { clearedStages:int, currentStage:int(1-based), currency:{coins:int}, items:{<boosterId>:n,...} }
+  //    items 키 = CB.boosterIds()(BALANCE.boosters 키 SSOT) 전부: magnet/magic_wand/extra_cannon/slot_plus/color_bomb.
+  function buildGameState(){
+    var cleared=0, cur=(stageIndex|0)+1, coins=(coinBalance|0), items={};
+    try{
+      var m=_cbMeta();
+      if(m){
+        cleared = m.unlockedStageIndex|0;                 // 클리어한 스테이지 수/해금 순번(0-based)
+        coins   = m.wallet ? (m.wallet.coins|0) : coins;  // 보유 재화(지갑 SSOT)
+        if(window.CB && CB.boosterIds && CB.boosterCount){
+          CB.boosterIds().forEach(function(id){ items[id]=CB.boosterCount(m,id)|0; });   // 보유 부스터 전부
+        }
+      }
+    }catch(e){}
+    // 메타/모듈 없는 단독 폴백: 코인은 캐시미러, 클리어는 현재레벨-1, 아이템은 비움.
+    if(!Object.keys(items).length){ try{ if(window.CB && CB.boosterIds) CB.boosterIds().forEach(function(id){ items[id]=0; }); }catch(e){} }
+    if(!cleared && (META && META.level)) cleared = Math.max(0, (META.level|0)-1);
+    return { clearedStages: cleared, currentStage: cur, currency: { coins: coins }, items: items };
+  }
+  // GameState 발신 — 가드된 단일 진입점(릴스/호스트만, __GR 전역 브리지 경유).
+  function sendGameState(){
+    try{ if(window.__GR && window.__GR.active){ window.__GR.emit('GameState', buildGameState()); } }catch(e){}
+  }
+  try{ window.__buildGameState=buildGameState; window.__sendGameState=sendGameState; }catch(e){}   // 헤드리스 검증 훅
+  // 복원 — 호스트가 보낸 상태로 진행도를 덮어쓴다(앱 저장이 정본). cb_meta_v2(로비/인게임 공유 메타)에 반영 후 해당 스테이지 로드.
+  function applyGameState(s){
+    if(!s || typeof s!=='object') return;
+    try{
+      var m=(window.CB && CB.loadMeta) ? CB.loadMeta(Date.now()) : null;
+      // 1) 클리어 스테이지 → unlockedStageIndex(역행 허용 — 앱 정본). currentWorld 파생.
+      if(m){
+        if(typeof s.clearedStages==='number'){
+          var maxIdx = (CB.totalMetaStages? CB.totalMetaStages()-1 : 1e9);
+          m.unlockedStageIndex = Math.max(0, Math.min(maxIdx, s.clearedStages|0));
+          try{ var cs=CB.stageByGlobalIndex(m.unlockedStageIndex); if(cs) m.currentWorldId=cs.worldId; }catch(e){}
+        }
+        // 2) 코인 → wallet.coins 절대치 세팅(차이만큼 addCoins — coinsEarned 통계 왜곡 방지 위해 양수증가만 누적).
+        if(s.currency && typeof s.currency.coins==='number' && CB.addCoins){
+          var tgt=Math.max(0, s.currency.coins|0), have=(m.wallet?m.wallet.coins|0:0);
+          try{ CB.addCoins(m, tgt-have); }catch(e){ if(m.wallet) m.wallet.coins=tgt; }
+        }
+        // 3) 부스터 인벤토리 → 절대치 복원(알려진 id 만, 음수 클램프). addBooster 차이가산.
+        if(s.items && typeof s.items==='object' && CB.boosterIds && CB.addBooster){
+          CB.boosterIds().forEach(function(id){
+            if(typeof s.items[id]!=='number') return;
+            var tgt=Math.max(0, s.items[id]|0), have=(CB.boosterCount?CB.boosterCount(m,id)|0:0);
+            try{ CB.addBooster(m, id, tgt-have); }catch(e){}
+          });
+        }
+        try{ CB.saveMeta(m); }catch(e){}
+        // 인게임 캐시 미러 갱신.
+        try{ coinBalance=(m.wallet?m.wallet.coins|0:coinBalance); META.coins=coinBalance; if(typeof _coinDisplay==='function') _coinDisplay(coinBalance); }catch(e){}
+      } else {
+        // 메타/모듈 없는 단독 폴백: 코인만 캐시 반영.
+        if(s.currency && typeof s.currency.coins==='number'){ try{ coinBalance=Math.max(0,s.currency.coins|0); META.coins=coinBalance; if(typeof _coinDisplay==='function') _coinDisplay(coinBalance); }catch(e){} }
+      }
+      // 4) 그 진행도로 현재 스테이지 로드. currentStage(1-based) 우선, 없으면 clearedStages+1.
+      var lvl = (typeof s.currentStage==='number' && s.currentStage>0) ? (s.currentStage|0)
+              : (typeof s.clearedStages==='number' ? (s.clearedStages|0)+1 : null);
+      if(lvl!=null){
+        try{ META.level=lvl; }catch(e){}
+        try{ if(typeof loadStage==='function' && typeof STAGES!=='undefined'){ loadStage(Math.max(0, Math.min(STAGES.length-1, lvl-1))); } }catch(e){}
+      }
+    }catch(e){}
+  }
+  try{ window.__applyGameState=applyGameState; }catch(e){}   // 헤드리스 검증 훅
+  // ⒞ 뒤로가기/백그라운드: 앱 뒤로가기 시 웹뷰가 hidden/unload 되며 커버 → 그 직전 진행도 발신.
+  try{ window.addEventListener('pagehide', sendGameState); }catch(e){}
+  try{ document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden') sendGameState(); }); }catch(e){}
 
   function syncMeta(){
     const payload={ type:'cubeblast:meta', di:META.di, filled:META.filled, coins:META.coins, ms:META.ms, level:META.level||1 };
@@ -9402,6 +9482,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     _confettiRAFLoop();
     // gamereels: 클리어 연출(타이틀/컨페티)이 뜬 뒤 성공 신호 — 연출 다 끝난 시점에 호스트가 CTA 띄울 수 있게 지연 emit.
     try{ if (GR.active){ var _grPi=stageIndex+1; if (shouldEmitGameEnd(_grPi)) setTimeout(function(){ GR.gameEnd(true, _grPi); }, 700); } }catch(e){}   // 클리어 성공 신호: reels 면 30배수/구간끝(to)에서만, 그 외 매 클리어. progressIndex/currentIndex=현재 레벨
+    try{ sendGameState(); }catch(e){}   // ⒜ 스테이지 클리어 → 진행상황(클리어수·코인·아이템) 발신(메타 적립 후 시점)
     flushMilestoneToasts();   // Wave2-A: 이번 클리어로 넘은 디오라마 마일스톤 보상 팝업(있으면 순차)
     // 중복 방지: 이전 클리어에서 남은 핸들러 제거 + once 가드(탭/합성 이벤트 중복 발화 차단)
     if (_clearTapHandler){ elClearOverlay.removeEventListener('pointerdown', _clearTapHandler); _clearTapHandler=null; }
@@ -11068,6 +11149,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     else if (diag){ diag.classList.remove('has-img'); }
     elOver.classList.add('show'); haptic('medium');
     try{ GR.gameEnd(false, stageIndex+1); }catch(e){}   // gamereels: 게임오버(공간 부족) → GameEnd success:false + progressIndex(1-based 스테이지 번호) (단독/릴스 빌드만)
+    try{ sendGameState(); }catch(e){}   // ⒜ 게임오버 → 진행상황(클리어수·코인·아이템) 발신
   }
   function hideGameOver(){ elOver.classList.remove('show'); }
   // Continue(코인 지불) → 좌측 3슬롯 옥토퍼스를 위 줄(여분 슬롯)로 튕겨 0,1,2번 비움 → 재개
@@ -11204,6 +11286,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   }
   // 헤드리스 스모크/QA 훅: 외부에서 클리어 적립을 강제 호출(인게임 풀루프 없이 메타 v2 적립 검증).
   window.__metaOnStageClear = metaOnStageClear;
+  // 헤드리스 QA 훅: 클리어 결과창(showStageClear) 직접 호출 — __EDITOR_PAUSE 로 gameLoop 의 clear 연출이 멈춘 솔버 검증에서
+  //   ⒜ 트리거(GameState 발신)를 실게임 경로 그대로 검증하기 위함. 실게임 동작 불변(연출 함수만 노출).
+  window.__simStageClear = (cubeReward)=>{ try{ metaOnStageClear(); }catch(e){} try{ showStageClear((cubeReward|0)||0, function(){}); }catch(e){} };
   // 헤드리스 스모크/QA 훅: 현재 메타 v2 상태 요약(제작화면 fill% 가 메타와 일치하는지 검증용).
   //   level 인자(1-based)를 주면 그 스테이지의 디오라마 fill%/완성도 반환(없으면 현재 META.level 기준).
   window.__metaDioramaState = (level)=>{
@@ -11544,6 +11629,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     }
     puMode=null; hidePuModal(); updateModeHint(); renderPowerups();
     if (typeof metaMissionEvent==='function') metaMissionEvent('use_booster', 1);   // Phase 8: 부스터 1회 사용 미션
+    try{ sendGameState(); }catch(e){}   // ⒝ 아이템(부스터) 사용 매번 → 진행상황(아이템 잔량 변동) 발신
   }
   // 매핑된 상점 부스터 보유분 1 차감(메타 SSOT) + 즉시 저장(cb_meta_v2 동일 오리진 → 로비 반영).
   //   메타/모듈 없거나 보유 0 이면 no-op(단독 인게임 무영향).
