@@ -12818,43 +12818,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   // ★ 단독/웹뷰(IS_SOLO) 전용: 스테이지 이전/다음 디버그 네비(2026-06-22 사용자 요청).
   //   평소 숨김 + 화면에 아무 표시 없음. 좌측 상단의 보이지 않는 영역을 3번 클릭하면 prev/next 바가 토글된다.
   function initSoloStageNav(){
-    if (window.__soloNavInit) return; window.__soloNavInit = true;
-    var root = document.body || document.documentElement;
-    var hit = document.createElement('div');   // 보이지 않는 좌상단 히트존(평소 화면에 아무것도 안 보임)
-    hit.id = 'solo-nav-hit';
-    hit.style.cssText = 'position:fixed;top:0;left:0;width:84px;height:84px;z-index:99988;background:transparent;';
-    root.appendChild(hit);
-    var bar = document.createElement('div');    // prev/next 바(평소 display:none)
-    bar.id = 'solo-nav-bar';
-    bar.style.cssText = 'position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:99989;display:none;'
-      + 'align-items:center;gap:8px;padding:6px 10px;border-radius:24px;background:rgba(12,18,32,0.85);'
-      + 'box-shadow:0 6px 18px rgba(0,0,0,0.4);user-select:none;-webkit-user-select:none;';
-    var bs = 'width:42px;height:42px;border:none;border-radius:50%;background:#2b6cf0;color:#fff;font:700 18px/1 sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent;';
-    var prev = document.createElement('button'); prev.textContent='◀'; prev.style.cssText=bs;
-    var label = document.createElement('span');
-    label.style.cssText='min-width:66px;text-align:center;color:#fff;font:700 16px/1 system-ui,sans-serif;';
-    var next = document.createElement('button'); next.textContent='▶'; next.style.cssText=bs;
-    bar.appendChild(prev); bar.appendChild(label); bar.appendChild(next); root.appendChild(bar);
-    function upd(){ try{ label.textContent = (stageIndex+1) + ' / ' + STAGES.length; }catch(e){} }
-    function go(d){ try{ var n=((stageIndex+d)%STAGES.length+STAGES.length)%STAGES.length; loadStage(n); upd(); }catch(e){} }
-    prev.addEventListener('click', function(e){ e.stopPropagation(); go(-1); });
-    next.addEventListener('click', function(e){ e.stopPropagation(); go(1); });
-    var taps=0, last=0;
-    function _toggleDev(){ var show=(bar.style.display==='none'); bar.style.display=show?'flex':'none'; window.__devMode=show; if(show) upd(); }
-    hit.addEventListener('click', function(){     // 모바일/터치: 좌상단 3연속 탭
-      var now = Date.now();
-      if (now - last > 1200) taps = 0;
-      last = now; taps++;
-      if (taps >= 3){ taps = 0; _toggleDev(); }
-    });
-    // ★ 개발자 모드(지침 L59): 키보드 Q 로 진입/탈출(데스크톱). 평소 숨김. window.__devMode 플래그.
-    window.addEventListener('keydown', function(e){
-      if ((e.key==='q'||e.key==='Q') && !e.metaKey && !e.ctrlKey && !e.altKey){
-        var t=e.target; if (t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
-        _toggleDev();
-      }
-    });
-    try{ if (RT && RT.dev) _toggleDev(); }catch(e){}   // ?dev: 개발자 네비(스테이지 이전/다음) 즉시 표시
+    // ★ 개발자 모드 완전 제거(2026-06-23 사용자 요청): 스테이지 이전/다음 네비 + 키보드 Q + 좌상단 3연속 탭 + ?dev 전부 삭제.
+    //   릴스·본게임 모두 적용. 어떤 단축키·히트존·URL 로도 진입 불가(스테이지 네비 자체가 더는 생성되지 않음).
+    return;
   }
 
   function boot(){
