@@ -3746,6 +3746,10 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   body.solo, body.gamereels { --safe-top: max(env(safe-area-inset-top, 0px), 52px); }
   body.reels { --safe-top: 0px !important; }   /* 릴스 호스트(?reels|?gamereels): 상단 여백 제거 — 게임플레이 위쪽 여백 금지 */
   body.solo #hud-top, body.gamereels #hud-top { transform: none !important; }
+  /* ★ 릴스 호스트: 좌상단 뒤로가기/우상단 메뉴 버튼과 겹치지 않게 코인·레벨·설정 HUD 만 아래로(게임플레이 캔버스는 풀스크린이라 여백 무영향). 2026-06-23 사용자 요청. */
+  body.reels #hud-top { padding-top: 56px !important; }
+  body.reels .level-label { top: 62px !important; }
+  body.reels #settings-btn { top: 58px !important; }
 
   :root {
     --game-scale: 1;
@@ -4740,9 +4744,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
         <button class="settings-toggle on" id="bgm-toggle" aria-label="Background music on/off"><span class="knob"></span></button></div>
       <div class="settings-row"><span class="settings-label">Haptic</span>
         <button class="settings-toggle on" id="haptic-toggle" aria-label="Haptic on/off"><span class="knob"></span></button></div>
-      <!-- TEMPORARY / DEV-ONLY: 테스트 모드 토글. 배포 전 제거 예정. -->
-      <div class="settings-row dev-row"><span class="settings-label">Test<span class="dev-badge">DEV</span></span>
-        <button class="settings-toggle on" id="test-toggle" data-edit-id="test-toggle" aria-label="Test mode on/off (temporary dev toggle)"><span class="knob"></span></button></div>
+      <!-- [제거] Test(DEV) 토글 UI 삭제(사용자 요청 — 본게임 설정에서 안 보이게). cb_testmode 게이트 로직(readTestMode/setTestMode·?dev/?admin)은 유지. -->
       <button class="settings-home-btn pix-btn" id="settings-home">HOME</button>
     </div>
   </div>
@@ -4840,7 +4842,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   function haptic(level, core){
     if (!HAPTIC.enabled) return;
     if (!core) return;   // ★ 햅틱은 '복셀 깨짐(removeVoxel)'·'문어 배치(sfx_place)' 두 코어 이벤트만 재생(사용자 지침 2026-06-22). 그 외 호출은 무음.
-    try{ if (GR && GR.active) GR.vibrate(level); }catch(e){}   // gamereels: 진동을 호스트에 위임(Soft/Light/MediumVibrate 신호). 아래 네이티브/웹 폴백은 비-호스트용으로 유지.
+    try{ var _gr=window.__GR; if (_gr && _gr.active) _gr.vibrate(level); }catch(e){}   // gamereels: 진동을 호스트에 위임(Soft/Light/MediumVibrate). ★ GR 은 다른 <script> 블록 const 라 이 스코프에서 직접 참조 불가 → window.__GR 로 브리지(2026-06-23 버그수정). 아래 네이티브/웹 폴백은 비-호스트용 유지.
     const gap = HAPTIC.GAP[level] || 0;
     if (gap){
       const t = (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
