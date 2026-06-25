@@ -5803,7 +5803,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     pink:    ['0xff1fc3'],
     orange:  ['0xff850a'],
     brown:   ['0x76400f'],
-    purple:  ['0x8b19ec'],
+    // purple: 새 대표색 0x5b27d6(블루-바이올렛 — 핑크와 명확히 구별). 0x8b19ec 는 build_stages.py 가 아직 쓰는
+    //   '구 purple' hex → groupOf 가 여전히 'purple' 로 인식하도록 별칭 유지(렌더 직전 _remapHex 가 새 hex 로 치환).
+    purple:  ['0x5b27d6', '0x8b19ec'],
     teal:    ['0x00ffd7'],
     skyblue: ['0x38b3fa'],
     lime:    ['0x99ff00'],
@@ -5815,12 +5817,17 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   for (const g in COLOR_GROUPS) for (const h of COLOR_GROUPS[g]) HEX_TO_GROUP[h.toLowerCase()] = g;
   function groupOf(hex) { return HEX_TO_GROUP[String(hex).toLowerCase()] || 'white'; }
   function hexToInt(hex) { return parseInt(String(hex).replace('0x',''), 16); }
+  // ★ 레거시 hex 치환: build_stages.py(편집 불가)가 아직 구 purple '0x8b19ec' 로 복셀/팔레트를 굽는다.
+  //   cube_blast.html 단독 수정 제약상, 데이터 진입 경계(복셀 c.c · 스테이지 pal)에서 새 purple '0x5b27d6' 로 치환한다.
+  //   → 복셀색·문어색·총알색이 모두 새 purple 로 일관되게 렌더되고, groupOf 는 두 hex 모두 'purple' 로 인식(별칭).
+  const HEX_REMAP = { '0x8b19ec':'0x5b27d6' };
+  function _remapHex(hex){ const k=String(hex).toLowerCase(); return HEX_REMAP[k] || hex; }
   // representative display color for a group's cannon
   // 16색 사물맞춤 팔레트 — COLOR_GROUPS 와 hex 일치(문어/총알 색).
   const GROUP_DISPLAY = {
     white:'#fafafa', black:'#141414', red:'#cc2a1a', green:'#1b881b',
     blue:'#0e4ebe', yellow:'#ffe40a', pink:'#ff1fc3', orange:'#ff850a',
-    brown:'#76400f', purple:'#8b19ec', teal:'#00ffd7', skyblue:'#38b3fa',
+    brown:'#76400f', purple:'#5b27d6', teal:'#00ffd7', skyblue:'#38b3fa',
     lime:'#99ff00', gray:'#707070', tan:'#debe73', maroon:'#970c44'
   };
 
@@ -6468,7 +6475,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     //   ※ LOCK/KEY 는 더 이상 보셀 플래그가 아니다 — 독립 큐 아이템(queueItems, kind:'lock'|'key')으로 분리됨.
     voxels = cubes.map((c,i)=>{
       const hp = (c.hp|0) > 1 ? (c.hp|0) : 1;
-      return { x:c.x, y:c.y, z:c.z, hex:c.c, group:groupOf(c.c), active:true, idx:i,
+      const hx=_remapHex(c.c);   // 레거시 purple hex → 새 purple(렌더·group 일관)
+      return { x:c.x, y:c.y, z:c.z, hex:hx, group:groupOf(hx), active:true, idx:i,
                hp:hp, maxHp:hp, pipe: !!c.pipe };
     });
     activeVoxelCount = voxels.length;
@@ -6874,7 +6882,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     const octos=(st && Array.isArray(st.octos)) ? st.octos : [];
     // group -> 대표 hex 갱신(이 스테이지 팔레트 기준). 문어/총알 색을 GROUP_DISPLAY(전역) 대신 여기서 끌어쓴다.
     stageGroupHex={};
-    for (let k=0;k<pal.length;k++){ stageGroupHex[groupOf(pal[k])]=pal[k]; }
+    for (let k=0;k<pal.length;k++){ stageGroupHex[groupOf(pal[k])]=_remapHex(pal[k]); }   // 문어/총알 색도 새 purple 로
     // 묶인 문어(links): STAGES[i].links = [[octoIdx,octoIdx],[octoIdx,octoIdx,octoIdx],...].
     //   각 그룹은 octos 배열 인덱스의 묶음. octos(색별 화력)는 그대로 두고 메타만 얹으므로 클리어가능성 불변.
     //   octoIdx → 그룹키(g0,g1,...) + 그룹크기(linkN) 룩업 테이블 구성.
@@ -7331,8 +7339,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   let idleTimer=0;
   let crisis=false;
   // ── WARNING / GAME-OVER 상태 (스펙: 5슬롯 풀+발사정지 1s → 경고(빨강 점멸 + 모델 2배속), 추가 5s → 게임오버) ──
-  const WARN_SECONDS=1.0;        // 5슬롯 풀 + 발사정지 지속 → 경고(3배속+빨강) 진입까지
-  const GAMEOVER_SECONDS=2.0;    // 경고 지속 → 게임오버까지(추가 시간). 총 무발사 1+2=3s → 게임오버(2026-06-25 사용자 스펙: "3초간 안 쏘면 게임오버")
+  const WARN_SECONDS=0.0;        // 5슬롯 풀 + 발사정지 '즉시' → 경고(3배속+빨강) 진입(slotFiring 은 연속판정이라 깜빡임 없음, 2026-06-25 사용자 스펙)
+  const GAMEOVER_SECONDS=5.0;    // 경고(3배속 회전) 5초 지속 → 게임오버. 무발사 0+5=5s → 게임오버(2026-06-25 사용자 스펙: "5초동안 3배속 돌다 게임오버")
   let warning=false;             // 경고 상태(슬롯 빨강 점멸 + 모델 2배속) 활성 여부
   let _warnHold=false;           // DEV: __forceWarn 으로 강제 경고 유지(자연 해제 방지) — 시각 검증용
   let firstDeployDone=false;
@@ -7675,32 +7683,41 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       const m=new THREE.MeshBasicMaterial({ color:_ct.getHex(), map:cordTex(), transparent:true, alphaTest:0.35, depthWrite:false, side:THREE.DoubleSide });
       _matCache[k]=m; return m;
     }
-    // ★ 연결선 = 문어 '실제 색 그대로'(매트). 예전 금속(metalness 0.65)·크림 cord 텍스처는 색이 떠 보여 폐지.
-    //   문어 본체와 동일 조명(blasterRig) + 매트 플라스틱 재질(metalness 0)이라 색이 100% 일치해 보인다.
+    // ★ 연결선 = 문어 색의 '진한(deep) 버전'(같은 색군이지만 채도↑·명도↓) → 파스텔 본체 위에서 또렷한 띠로 보인다.
+    //   (예전: 본체와 100% 동일색 → 핑크 끈이 핑크 문어 위에서 사라짐. 이제 색군은 유지하되 더 진하게.)
+    //   _deepenHex: 색을 HSL 로 풀어 채도↑·명도↓ 한 진한 톤. (흰/회색 등 무채색은 회색→차콜로 떨어뜨려 가시성 확보.)
+    const _dc=new THREE.Color();
+    function _deepenHex(hex){
+      _dc.setHex(hex);
+      const hsl={}; _dc.getHSL(hsl);
+      // 채도↑(파스텔 본체와 대비), 명도↓(어두운 띠). 무채색(채도≈0)은 임의 회색이 아니라 진한 차콜.
+      const sat=hsl.s<0.08 ? 0.0 : Math.min(1, hsl.s*1.35+0.18);
+      const lig=hsl.s<0.08 ? Math.min(0.32, hsl.l*0.55) : Math.max(0.16, hsl.l*0.52);
+      _dc.setHSL(hsl.h, sat, lig);
+      return _dc.getHex();
+    }
     function metalMatHex(hex){
       const k='mH'+hex;
       if (_matCache[k]) return _matCache[k];
-      const m=new THREE.MeshStandardMaterial({ color:hex, roughness:0.5, metalness:0.0 });
+      const m=new THREE.MeshStandardMaterial({ color:_deepenHex(hex), roughness:0.45, metalness:0.0 });
       _matCache[k]=m; return m;
     }
     function metalMat(group){
       const k='m'+group;
       if (_matCache[k]) return _matCache[k];
-      const hex=octoColorHex(group);
-      const m=new THREE.MeshStandardMaterial({ color:hex, roughness:0.5, metalness:0.0 });
+      const m=new THREE.MeshStandardMaterial({ color:_deepenHex(octoColorHex(group)), roughness:0.45, metalness:0.0 });
       _matCache[k]=m; return m;
     }
     function capMatHex(hex){
       const k='cH'+hex;
       if (_matCache[k]) return _matCache[k];
-      const m=new THREE.MeshStandardMaterial({ color:hex, roughness:0.5, metalness:0.0 });
+      const m=new THREE.MeshStandardMaterial({ color:_deepenHex(hex), roughness:0.45, metalness:0.0 });
       _matCache[k]=m; return m;
     }
     function capMat(group){
       const k='c'+group;
       if (_matCache[k]) return _matCache[k];
-      const hex=octoColorHex(group);
-      const m=new THREE.MeshStandardMaterial({ color:hex, roughness:0.5, metalness:0.0 });
+      const m=new THREE.MeshStandardMaterial({ color:_deepenHex(octoColorHex(group)), roughness:0.45, metalness:0.0 });
       _matCache[k]=m; return m;
     }
     // 한 마디 세그먼트(Group). cord 모드: 평면 2장(pA 아래/색A, pB 위/색B). 폴백: 핸들2+캡2.
@@ -7797,7 +7814,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       const mem=_qGroups[key]; if (mem.length<2) continue;
       mem.sort((a,b)=>a.ord-b.ord);
       for (let k=0;k+1<mem.length;k++){
-        _LINK_CONN.place(mem[k].octo, mem[k].scale, mem[k].color, mem[k+1].octo, mem[k+1].scale, mem[k+1].color, 0.035, 0.045,
+        _LINK_CONN.place(mem[k].octo, mem[k].scale, mem[k].color, mem[k+1].octo, mem[k+1].scale, mem[k+1].color, 0.050, 0.060,
           mem[k].mystery, mem[k+1].mystery);
       }
     }
@@ -7809,7 +7826,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       if (!c.octo || !d.octo) continue;
       if (c.deploying || d.deploying) continue;
       const sa=c.octo.scale.x||OCTO.scale, sb=d.octo.scale.x||OCTO.scale;
-      _LINK_CONN.place(c.octo, sa, c.color, d.octo, sb, d.color, 0.045, 0.055,
+      _LINK_CONN.place(c.octo, sa, c.color, d.octo, sb, d.color, 0.058, 0.068,
         _isMystery(c.octo, null, 0), _isMystery(d.octo, null, 0));
     }
     _LINK_CONN.end();
