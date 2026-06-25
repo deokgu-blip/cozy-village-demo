@@ -7813,8 +7813,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       const iconSrc = loadedImages[p.slot] ? loadedImages[p.slot].src : null;
       if (iconSrc) html+='<img class="pu-icon" src="'+iconSrc+'" alt="" data-edit-id="pu-icon-'+p.id+'">';
       if (available){
-        // 보유 배지: 무료1회는 '1', 부스터 보유분만 있으면 그 개수(부스터로만 켜진 경우).
-        const cnt = freeReady ? 1 : inv;
+        // 보유 배지: 인벤토리 보유분이 있으면 '그 개수'를 우선 표시(앱 복원값과 일치 — 2026-06-25 버그수정).
+        //   보유 0 이고 레벨해금 무료1회만 있으면 '1'. (예전엔 무료1회가 보유 인벤토리를 가려 7개 보유해도 '1' 로 떴음.)
+        const cnt = inv > 0 ? inv : (freeReady ? 1 : 0);
         html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'"><span>'+cnt+'</span></div>';
       } else if (!levelUnlocked){
         html+='<div class="pu-lv" data-edit-id="pu-lv-'+p.id+'">LV '+p.unlock+'</div>';
@@ -11614,17 +11615,18 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   }
   function closePuModal(){ puMode=null; hidePuModal(); updateModeHint(); }
   // 테스트 빌드(__TEST_INFINITE_PU=true)에서는 파워업이 소진되지 않음(무한 사용). 배포본은 정상 1회 소진.
-  //   소진 우선순위: ① 레벨해금 무료 1회분(puUsed) → ② 상점 부스터 보유분(m.boosters[id]-- + saveMeta).
-  //   (무료분이 남아있으면 그걸 먼저 쓰고, 이미 소진됐으면 구매한 부스터 인벤토리에서 차감.)
+  //   소진 우선순위(2026-06-25 변경): ① 보유 인벤토리(m.boosters[id]-- + saveMeta) → ② 보유 0 일 때만 레벨해금 무료 1회분(puUsed).
+  //   (보유분을 먼저 써서 배지=보유수가 사용마다 정확히 줄도록. 앱 복원값과 표시 일치. 무료1회는 보유 0 일 때의 '체험' 용도.)
   function consumePU(id){
     if (!window.__TEST_INFINITE_PU){
       const level=STAGES[stageIndex]?STAGES[stageIndex].id:1;
       const def=POWERUPS.find(x=>x.id===id);
       const freeReady = def && (level>=def.unlock) && !puUsed[id];
-      if (freeReady){
-        puUsed[id]=true;                                            // ① 무료 1회분 소진(세션)
-      } else {
-        consumeBoosterInv(id);                                      // ② 상점 부스터 보유분에서 1 차감(메타 SSOT)
+      const inv = boosterInvForPu(id);
+      if (inv>0){
+        consumeBoosterInv(id);                                      // ① 보유 인벤토리 먼저 차감 → 배지(=보유수)가 사용마다 정확히 감소(앱 복원값과 일치, 2026-06-25)
+      } else if (freeReady){
+        puUsed[id]=true;                                            // ② 보유 0 일 때만 레벨해금 무료 1회분 소진
       }
     }
     puMode=null; hidePuModal(); updateModeHint(); renderPowerups();
