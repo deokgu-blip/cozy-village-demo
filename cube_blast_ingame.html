@@ -7331,8 +7331,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   let idleTimer=0;
   let crisis=false;
   // ── WARNING / GAME-OVER 상태 (스펙: 5슬롯 풀+발사정지 1s → 경고(빨강 점멸 + 모델 2배속), 추가 5s → 게임오버) ──
-  const WARN_SECONDS=1.0;        // 5슬롯 풀 + 발사정지 지속 → 경고 진입까지
-  const GAMEOVER_SECONDS=5.0;    // 경고 지속 → 게임오버까지(추가 시간)
+  const WARN_SECONDS=1.0;        // 5슬롯 풀 + 발사정지 지속 → 경고(3배속+빨강) 진입까지
+  const GAMEOVER_SECONDS=2.0;    // 경고 지속 → 게임오버까지(추가 시간). 총 무발사 1+2=3s → 게임오버(2026-06-25 사용자 스펙: "3초간 안 쏘면 게임오버")
   let warning=false;             // 경고 상태(슬롯 빨강 점멸 + 모델 2배속) 활성 여부
   let _warnHold=false;           // DEV: __forceWarn 으로 강제 경고 유지(자연 해제 방지) — 시각 검증용
   let firstDeployDone=false;
