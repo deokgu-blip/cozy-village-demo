@@ -4300,6 +4300,22 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     box-shadow:0 1px 3px rgba(0,0,0,.3);
     text-shadow:0 1px 1px rgba(0,60,20,.4); }
   .pu.locked .pu-base, .pu.locked .pu-icon { filter:grayscale(.75) brightness(.66); }
+  /* 릴스/단독 구매형: 미보유·해금 아이템의 코인 가격 라벨 — .pu-lv 와 같은 위치/크기, 코인 골드 톤 */
+  .pu-price { position:absolute; bottom:-7px; left:50%; transform:translateX(-50%); z-index:4;
+    display:flex; align-items:center; gap:2px;
+    font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-weight:400; font-size:11px; color:#5a3a00;
+    background:linear-gradient(180deg,#ffe08a 0%,#f5b417 70%,#e09a00 100%); border:2px solid #fff;
+    padding:2px 7px; border-radius:11px; white-space:nowrap;
+    box-shadow:0 1px 3px rgba(0,0,0,.3);
+    text-shadow:0 1px 0 rgba(255,255,255,.5); }
+  .pu-price .pu-price-coin { display:none; }
+  /* 코인 아이콘 에셋이 있으면 가격 앞에 작은 코인 표시(없으면 골드 라벨만) */
+  .pu-price.has-icon .pu-price-coin { display:inline-block; width:12px; height:12px; flex:0 0 auto;
+    background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%, #ffe08a, #f5b417 70%, #d68f00))) center/contain no-repeat; }
+  /* 코인 부족: 아이템 전체 회색(가격은 계속 보임, 발동 불가). 가격 라벨 자체는 흐리되 읽히게 유지. */
+  .pu.cantafford .pu-base, .pu.cantafford .pu-icon { filter:grayscale(.85) brightness(.6); }
+  .pu.cantafford { cursor:not-allowed; }
+  .pu.cantafford .pu-price { filter:saturate(.55) brightness(.92); opacity:.92; }
 
   /* ---- Overlays ---- */
   #result-overlay {
@@ -7152,7 +7168,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       try{ if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.gamereels) window.webkit.messageHandlers.gamereels.postMessage(msg); }catch(e){}
       // 부모/자기 윈도우 postMessage — 웹뷰·iframe 호스트 공통 폴백.
       try{ if (window.parent && window.parent!==window) window.parent.postMessage(msg,'*'); }catch(e){}
-      try{ window.postMessage(msg,'*'); }catch(e){}
+      // [2026-06-25 버그수정] window.postMessage(self) 폴백 제거: 최상위 웹뷰(parent===window, Flutter InAppWebView 등)에서 게임이 자기 GameState emit 을 _recv 로 되받아 currentStage 복원→스테이지 리로드되는 '자기에코' 루프 유발(클리어해도 결과창 안뜨고 1스테이지 재시작). 호스트는 callHandler/webkit/parent(iframe) 로 수신하므로 self-post 는 불필요.
     }
     function emit(event, data){ try{ _emit(event, data); }catch(e){} }
     function _emitStart(){ emit('GameStart', null); }   // 호스트가 'GameStart' 를 기대 → 별칭(started/luna:started) 제거(혼선 방지)
@@ -7192,7 +7208,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       else if(m.event==='RequestState'){ try{ if(window.__sendGameState) window.__sendGameState(); }catch(e){} }
     }
     try{ window.OnMessageFromFlutter=function(d){ _recv(d); }; }catch(e){}
-    try{ window.addEventListener('message', function(ev){ var d=ev&&ev.data; if(d && (d.event==='GamePause'||d.event==='GameResume'||d.event==='GameState'||d.event==='RestoreState'||d.event==='RequestState')) _recv(d); }); }catch(e){}
+    try{ window.addEventListener('message', function(ev){ if(ev && ev.source===window) return;   /* 자기 윈도우가 보낸 메시지(자기에코)는 무시 — 게임 emit 이 _recv 로 되돌아오는 루프 방지(2026-06-25) */ var d=ev&&ev.data; if(d && (d.event==='GamePause'||d.event==='GameResume'||d.event==='GameState'||d.event==='RestoreState'||d.event==='RequestState')) _recv(d); }); }catch(e){}
     try{ window.addEventListener('GamePause', function(){ setPaused(true); }); window.addEventListener('GameResume', function(){ setPaused(false); }); }catch(e){}
     return { active:true, emit:emit, gameStart:gameStart, gameEnd:gameEnd, vibrate:vibrate, setPaused:setPaused, isPaused:function(){return _paused;} };
   })();
@@ -7397,13 +7413,29 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     const bid = PU_BOOSTER[puId]; if(!bid) return 0;
     try{ const m=_meta(); return (m && window.CB && CB.boosterCount) ? (CB.boosterCount(m, bid)|0) : 0; }catch(e){ return 0; }
   }
-  // 파워업이 '현재 사용 가능'한가 = (레벨해금 + 무료1회 미사용) OR (매핑 부스터 보유분>0). 테스트 모드는 항상 가능.
+  // ★ 릴스/단독(IS_SOLO) 구매형 모델: 이 파워업의 코인 가격(매핑 부스터 가격, 없으면 null).
+  //   boosterPrice 는 CB 모듈 내부 함수 → 게임 스코프에선 CB.boosterPrice 로 접근(직접 참조 시 ReferenceError).
+  function puPriceFor(puId){
+    const bid = PU_BOOSTER[puId]; if(!bid) return null;
+    try{ return (window.CB && CB.boosterPrice) ? CB.boosterPrice(bid) : null; }catch(e){ return null; }
+  }
+  // 파워업이 '현재 사용 가능'한가.
+  //   · 본게임(비-IS_SOLO): (레벨해금 + 무료1회 미사용) OR (매핑 부스터 보유분>0).
+  //   · 릴스/단독(IS_SOLO) 구매형: 보유분>0 OR (레벨해금 + 가격존재 + 코인 충분). 무료1회 없음.
+  //   테스트 모드는 항상 가능.
   function puAvailable(puId){
     if (window.__TEST_INFINITE_PU) return true;
     const def = POWERUPS.find(x=>x.id===puId); if(!def) return false;
     const level = STAGES[stageIndex] ? STAGES[stageIndex].id : 1;
+    const inv = boosterInvForPu(puId);
+    if (IS_SOLO){
+      if (inv>0) return true;
+      const levelUnlocked = level >= def.unlock;
+      const price = puPriceFor(puId);
+      return levelUnlocked && price!=null && (coinBalance|0) >= price;   // 구매형: 살 수 있어야 발동 가능(arm 게이트)
+    }
     const freeReady = (level >= def.unlock) && !puUsed[puId];   // 무료 1회분
-    return freeReady || boosterInvForPu(puId) > 0;
+    return freeReady || inv > 0;
   }
 
   function buildSlotsUI(){
@@ -7798,25 +7830,38 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       const levelUnlocked = level>=puUnlockLevel(p);
       const freeReady = levelUnlocked && !puUsed[p.id];               // 무료 1회분(레벨해금)
       const inv = boosterInvForPu(p.id);                              // 상점 구매 보유분(Phase 9)
-      const available = freeReady || inv>0;                           // 사용 가능 = 무료 OR 부스터 보유
+      // 릴스/단독(구매형): 무료1회 없음 → 보유분>0 또는 (레벨해금 + 가격존재 + 코인충분) 이어야 사용가능.
+      const price = IS_SOLO ? puPriceFor(p.id) : null;
+      const canAfford = (price!=null) && ((coinBalance|0) >= price);
+      const available = IS_SOLO
+        ? (inv>0 || (levelUnlocked && price!=null && canAfford))
+        : (freeReady || inv>0);                                       // 본게임: 무료 OR 부스터 보유(회귀 0)
       let disabled = false;
       if (available){
         if (p.id==='magnet' && slotsAllFull) disabled=true;             // 슬롯 꽉 참 → 자석 비활성
         if (p.id==='hand' && slotsAllFull) disabled=true;               // 슬롯 꽉 참 → 손 비활성(magnet 동형)
         if (p.id==='extra' && (slotsAllEmpty || firstEmptyExtra()<0)) disabled=true;  // 슬롯 비어있음 또는 위 줄 가득 → 스프링 비활성
       }
+      // 릴스/단독 구매형: 미보유·레벨해금이지만 코인 부족 → .cantafford(회색) + 가격은 계속 표시(살 수 없음 안내).
+      const showPrice = IS_SOLO && inv<=0 && levelUnlocked && price!=null;
+      const cantAfford = showPrice && !canAfford;
       const d=document.createElement('div');
-      d.className='pu'+(available?'':' locked')+(disabled?' disabled':''); d.dataset.id=p.id;
+      d.className='pu'+(available?'':' locked')+(disabled?' disabled':'')+(cantAfford?' cantafford':''); d.dataset.id=p.id;
       d.dataset.editId='pu-'+p.id;
       let html='';
       if (baseSrc) html+='<img class="pu-base" src="'+baseSrc+'" alt="" data-edit-id="pu-frame-'+p.id+'">';
       const iconSrc = loadedImages[p.slot] ? loadedImages[p.slot].src : null;
       if (iconSrc) html+='<img class="pu-icon" src="'+iconSrc+'" alt="" data-edit-id="pu-icon-'+p.id+'">';
-      if (available){
+      if (inv > 0){
         // 보유 배지: 인벤토리 보유분이 있으면 '그 개수'를 우선 표시(앱 복원값과 일치 — 2026-06-25 버그수정).
-        //   보유 0 이고 레벨해금 무료1회만 있으면 '1'. (예전엔 무료1회가 보유 인벤토리를 가려 7개 보유해도 '1' 로 떴음.)
-        const cnt = inv > 0 ? inv : (freeReady ? 1 : 0);
-        html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'"><span>'+cnt+'</span></div>';
+        html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'"><span>'+inv+'</span></div>';
+      } else if (showPrice){
+        // 릴스/단독 구매형: 미보유 + 레벨해금 → 코인 가격 표시(누르면 arm, 효과 확정 시 차감).
+        const coinTint = loadedImages['coin_icon'] ? ' has-icon' : '';
+        html+='<div class="pu-price'+coinTint+'" data-edit-id="pu-price-'+p.id+'"><i class="pu-price-coin"></i><span>'+price+'</span></div>';
+      } else if (freeReady){
+        // 본게임: 미보유 + 무료1회 → '1'. (IS_SOLO 에선 freeReady 가 위 showPrice 분기로 흡수되어 여기 안 옴.)
+        html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'"><span>1</span></div>';
       } else if (!levelUnlocked){
         html+='<div class="pu-lv" data-edit-id="pu-lv-'+p.id+'">LV '+p.unlock+'</div>';
       }
@@ -11621,12 +11666,34 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     if (!window.__TEST_INFINITE_PU){
       const level=STAGES[stageIndex]?STAGES[stageIndex].id:1;
       const def=POWERUPS.find(x=>x.id===id);
-      const freeReady = def && (level>=def.unlock) && !puUsed[id];
       const inv = boosterInvForPu(id);
-      if (inv>0){
-        consumeBoosterInv(id);                                      // ① 보유 인벤토리 먼저 차감 → 배지(=보유수)가 사용마다 정확히 감소(앱 복원값과 일치, 2026-06-25)
-      } else if (freeReady){
-        puUsed[id]=true;                                            // ② 보유 0 일 때만 레벨해금 무료 1회분 소진
+      if (IS_SOLO){
+        // ★ 릴스/단독 구매형: 보유분 우선 차감, 없으면 효과 확정 시점에 코인 가격을 차감(직접 구매-사용, 인벤 미적립).
+        if (inv>0){
+          consumeBoosterInv(id);                                    // 보유분 먼저(배지=보유수 정확히 감소)
+        } else {
+          const price = puPriceFor(id);
+          if (price!=null){
+            try{
+              const m = _cbMeta();
+              if (m && window.CB && CB.addCoins && CB.saveMeta){
+                if ((m.wallet.coins|0) >= price){                   // arm 단계서 이미 게이트됨 — 방어적 재확인
+                  CB.addCoins(m, -price); CB.saveMeta(m);
+                  coinBalance = m.wallet.coins|0; META.coins=coinBalance; _coinDisplay(coinBalance);
+                }
+              } else if ((coinBalance|0) >= price){                 // CB 미인라인 폴백
+                coinBalance = Math.max(0, (coinBalance|0) - price); META.coins=coinBalance; _coinDisplay(coinBalance);
+              }
+            }catch(e){}
+          }
+        }
+      } else {
+        const freeReady = def && (level>=def.unlock) && !puUsed[id];
+        if (inv>0){
+          consumeBoosterInv(id);                                    // ① 보유 인벤토리 먼저 차감 → 배지(=보유수)가 사용마다 정확히 감소(앱 복원값과 일치, 2026-06-25)
+        } else if (freeReady){
+          puUsed[id]=true;                                          // ② 보유 0 일 때만 레벨해금 무료 1회분 소진
+        }
       }
     }
     puMode=null; hidePuModal(); updateModeHint(); renderPowerups();
