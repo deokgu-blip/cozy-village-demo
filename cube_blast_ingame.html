@@ -4263,6 +4263,13 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     position:absolute; left:0; right:0; bottom:0; height:116px;
     display:flex; gap:6px; justify-content:center; align-items:center; z-index:9;
   }
+  /* ★ 단독/릴스(IS_SOLO) 가격 라벨 노출 보장(2026-06-26 사용자 신고: 가격 안 보임): 아이템 행을
+     화면 맨 아래 가장자리(+세이프에어리어)에서 띄워, 버튼 아래로 -7px 매달린 .pu-price 골드 라벨이
+     뷰포트/세이프인셋에 잘리지 않게 한다. 본게임(로비 iframe)/에디터 레이아웃은 그대로(solo 한정 스코프). */
+  body.solo #powerups, body.gamereels #powerups, body.reels #powerups {
+    padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 18px);
+    box-sizing:border-box;
+  }
   /* 파워업 슬롯 — 브롤 글로시 라운드 프레임(호스트 pu_base 없을 때 폴백) */
   .pu { width:72px; height:72px; position:relative; pointer-events:auto; border-radius:19px;
     background:linear-gradient(180deg,#56a4ff 0%,#2f86e6 50%,#1f6fd0 100%);
@@ -4424,6 +4431,58 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   .milestone-toast .ms-gift::before{ content:''; position:absolute; left:50%; top:0; transform:translateX(-50%); width:5px; height:100%; background:#e0432f; }
   .milestone-toast .ms-gift::after{ content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); width:100%; height:5px; background:#e0432f; }
   .milestone-toast .ms-rw{ font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:16px; color:#fff; letter-spacing:.3px; text-shadow:0 2px 0 #0b1d3e; text-transform:capitalize; }
+
+  /* ── HARD LEVEL! 배너(2026-06-26 #6): 위험 신호(레드/오렌지) 액센트의 네이비 픽셀 카드. 진입 시 1.5s 팝 후 페이드. ── */
+  #hard-banner{ position:absolute; left:50%; top:34%; transform:translate(-50%,-50%) scale(.5) rotate(-4deg);
+    z-index:120; pointer-events:none; opacity:0;
+    display:flex; align-items:center; gap:11px; padding:13px 24px; border-radius:16px; white-space:nowrap;
+    background:linear-gradient(180deg,#7a1f1f 0%,#4a1230 100%); border:4px solid #ffb347;
+    box-shadow:0 7px 0 #2a0a14, 0 12px 22px rgba(120,8,8,.5), inset 0 3px 0 rgba(255,180,90,.4), inset 0 -4px 0 rgba(40,4,8,.5);
+    font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; }
+  #hard-banner.show{ animation:hardBannerPop 1.9s cubic-bezier(.2,1.5,.4,1) forwards; }
+  #hard-banner .hb-skull{ font-size:30px; filter:drop-shadow(0 2px 2px rgba(0,0,0,.4)); }
+  #hard-banner .hb-txt{ font-size:27px; color:#fff; letter-spacing:.6px;
+    text-shadow:0 0 10px rgba(255,90,40,.8), 0 3px 0 #6a0e0e, 0 5px 7px rgba(0,0,0,.4); }
+  @keyframes hardBannerPop{
+    0%   { opacity:0; transform:translate(-50%,-50%) scale(.5) rotate(-4deg); }
+    14%  { opacity:1; transform:translate(-50%,-50%) scale(1.14) rotate(2deg); }
+    26%  { transform:translate(-50%,-50%) scale(.96) rotate(-1deg); }
+    36%  { transform:translate(-50%,-50%) scale(1.03) rotate(0deg); }
+    78%  { opacity:1; transform:translate(-50%,-50%) scale(1) rotate(0deg); }
+    100% { opacity:0; transform:translate(-50%,-58%) scale(.94) rotate(0deg); }
+  }
+
+  /* ── ITEM UNLOCK 팝업(2026-06-26 #7): 아이템 해금 첫 진입 시 설명 + 무료 1개 안내(.pix-card 네이비 톤). ── */
+  #item-unlock-overlay{ position:fixed; inset:0; z-index:205; display:none; align-items:center; justify-content:center;
+    background:rgba(6,12,24,0.62); }
+  #item-unlock-overlay.show{ display:flex; }
+  .iu-card{ width:278px; max-width:84%; padding:24px 22px 22px; opacity:0; transform:scale(.7);
+    transition:transform .3s cubic-bezier(.2,1.4,.5,1), opacity .25s; }
+  #item-unlock-overlay.show .iu-card{ opacity:1; transform:scale(1); }
+  .iu-new{ display:inline-block; margin-bottom:9px; padding:3px 13px; border-radius:11px;
+    font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:13px; letter-spacing:1px; color:#241200;
+    background:linear-gradient(180deg,#ffe06a 0%,#ffb931 100%); border:2px solid #fff;
+    box-shadow:0 2px 0 rgba(120,80,8,.5), inset 0 1px 0 rgba(255,255,255,.5); text-shadow:0 1px 0 rgba(255,255,255,.4); }
+  .iu-icon-wrap{ width:104px; height:104px; margin:4px auto 12px; position:relative;
+    display:flex; align-items:center; justify-content:center; }
+  .iu-icon-wrap .iu-glow{ position:absolute; inset:-6px; border-radius:50%;
+    background:radial-gradient(circle, rgba(120,180,255,.5) 0%, rgba(120,180,255,0) 68%); animation:iuGlow 1.6s ease-in-out infinite; }
+  @keyframes iuGlow{ 0%,100%{ transform:scale(.92); opacity:.7; } 50%{ transform:scale(1.06); opacity:1; } }
+  .iu-icon-wrap img{ position:relative; width:100%; height:100%; object-fit:contain;
+    filter:drop-shadow(0 4px 6px rgba(0,0,0,.4)); animation:iuFloat 2.4s ease-in-out infinite; }
+  @keyframes iuFloat{ 0%,100%{ transform:translateY(0) rotate(-2deg); } 50%{ transform:translateY(-6px) rotate(2deg); } }
+  .iu-name{ font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:24px; color:#fff; letter-spacing:.5px;
+    text-shadow:0 3px 0 #0c1f40, 0 4px 6px rgba(0,0,0,.4); margin-bottom:8px; }
+  .iu-desc{ font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:14px; font-weight:400; line-height:1.42;
+    color:#cfe0ff; letter-spacing:.2px; margin-bottom:13px; text-shadow:0 1px 0 #0b1d3e; }
+  .iu-free{ display:flex; align-items:center; justify-content:center; gap:7px; margin-bottom:16px;
+    font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:15px; color:#ffe6a0; letter-spacing:.3px;
+    text-shadow:0 1px 0 #0b1d3e; }
+  .iu-free .iu-gift{ width:22px; height:22px; border-radius:6px; position:relative;
+    background:linear-gradient(135deg,#ffe06a 0%,#ffb931 100%); box-shadow:inset 0 2px 2px rgba(255,255,255,.6),0 2px 4px rgba(0,0,0,.4); }
+  .iu-free .iu-gift::before{ content:''; position:absolute; left:50%; top:0; transform:translateX(-50%); width:4px; height:100%; background:#e0432f; }
+  .iu-free .iu-gift::after{ content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); width:100%; height:4px; background:#e0432f; }
+  .iu-btn{ width:200px; max-width:100%; margin:0 auto; padding:13px 16px; font-size:21px; letter-spacing:.5px; }
 
   #combo-text {
     display:none;   /* 콤보 텍스트 출력 제거(사용자 요청) */
@@ -4711,7 +4770,22 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     </div>
 
     <!-- 코인 부족 토스트(작게, 아트톤) -->
-    <div id="coin-toast"><span class="ct-coin"></span><span class="ct-msg">코인이 부족합니다</span></div>
+    <div id="coin-toast"><span class="ct-coin"></span><span class="ct-msg">Not enough coins</span></div>
+
+    <!-- HARD LEVEL! 배너(진입 시 1회, 비차단) -->
+    <div id="hard-banner"><span class="hb-skull">💀</span><span class="hb-txt">HARD LEVEL!</span></div>
+
+    <!-- 아이템 해금 팝업(첫 진입 1회, 무료 1개 지급 안내) -->
+    <div id="item-unlock-overlay">
+      <div class="iu-card pix-card">
+        <div class="iu-new">NEW ITEM!</div>
+        <div class="iu-icon-wrap"><div class="iu-glow"></div><img class="iu-icon" alt=""></div>
+        <div class="iu-name"></div>
+        <div class="iu-desc"></div>
+        <div class="iu-free"><span class="iu-gift"></span><span class="iu-free-txt">1 free!</span></div>
+        <button class="iu-btn pix-btn">Got it!</button>
+      </div>
+    </div>
 
     <!-- 디오라마 제작 화면(클리어 직후) -->
     <div id="make-overlay">
@@ -7480,6 +7554,91 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     if (_coinToastT) clearTimeout(_coinToastT);
     _coinToastT=setTimeout(()=>t.classList.remove('show'), 1500);
   }
+
+  // ═══ HARD LEVEL! 배너(2026-06-26 #6) ═══════════════════════════════════════
+  //   STAGES[stageIndex].hard 가 truthy 인 스테이지 진입 시 1회, 비차단(연출만). 데모/단독 무관.
+  let _hardBannerT=null;
+  function showHardBanner(){
+    const b=document.getElementById('hard-banner'); if(!b) return;
+    b.classList.remove('show'); void b.offsetWidth;   // 애니메이션 재시작
+    b.classList.add('show'); try{ haptic('medium'); }catch(e){}
+    try{ playSfx('sfx_pop'); }catch(e){}
+    if (_hardBannerT) clearTimeout(_hardBannerT);
+    _hardBannerT=setTimeout(()=>{ b.classList.remove('show'); }, 1950);   // 애니메이션 길이와 동기
+  }
+
+  // ═══ ITEM UNLOCK 팝업 + 무료 1개 지급(2026-06-26 #7) ════════════════════════
+  //   각 아이템의 해금 레벨(POWERUPS[].unlock) 첫 진입 시: ① 부스터 1개 무료 지급(once, localStorage 플래그)
+  //   ② 아이템 설명 팝업(.pix-card). 설명은 각 아이템의 실제 메커닉(consumePU/arm 프롬프트)을 그대로 반영.
+  //   본게임(비-IS_SOLO)에서만 의미 있음(단독/릴스는 구매형이라 무료지급/해금팝업 비활성).
+  const ITEM_INFO = {
+    magnet:  { name:'Magnet',   desc:'Tap ANY shooter in the queue and drop it straight into a slot — skip the line!' },
+    wand:    { name:'Magic Wand', desc:'Wave it to shuffle all the shooters in the queue into a fresh order.' },
+    extra:   { name:'Spring',   desc:'Bounce a shooter up off its slot to free that slot for a new color.' },
+    rainbow: { name:'Cannon',   desc:'Tap a cube to fire a big blast that clears a whole chunk at once.' },
+    vacuum:  { name:'Vacuum',   desc:'Tap any color to suck up every cube of that color in one go.' }
+  };
+  let _iuArmed=false;   // 팝업이 열려 다음 dismiss 까지 추가 트리거 방지
+  function _itemGranted(id){ try{ return localStorage.getItem('cb_itemgrant_'+id)==='1'; }catch(e){ return false; } }
+  function _markItemGranted(id){ try{ localStorage.setItem('cb_itemgrant_'+id,'1'); }catch(e){} }
+  // 이 스테이지에서 '처음 해금되는' 아이템(레벨==unlock) 중 아직 무료지급/팝업 안 한 첫 항목을 반환(없으면 null).
+  function _pendingUnlock(level){
+    for (const p of POWERUPS){
+      if (p.unlock===level && !_itemGranted(p.id)) return p;
+    }
+    return null;
+  }
+  // 부스터 1개 무료 지급(메타 SSOT) — 매핑 부스터에 +1, 즉시 저장. 메타 없으면 no-op(플래그만 세움).
+  function _grantFreeItem(puId){
+    const bid=PU_BOOSTER[puId]; if(!bid) return;
+    try{
+      const m=_cbMeta();
+      if (m && window.CB && CB.addBooster && CB.saveMeta){ CB.addBooster(m, bid, 1); CB.saveMeta(m); }
+    }catch(e){}
+  }
+  // 해금 팝업 표시(아이콘/이름/설명/무료1개). dismiss 버튼으로 닫음.
+  function showItemUnlock(p){
+    const ov=document.getElementById('item-unlock-overlay'); if(!ov) return;
+    const info=ITEM_INFO[p.id] || { name:p.id, desc:'' };
+    const img=ov.querySelector('.iu-icon');
+    const src=(loadedImages[p.slot] && loadedImages[p.slot].src) ? loadedImages[p.slot].src : null;
+    if (img){ if(src){ img.src=src; img.style.display=''; } else { img.style.display='none'; } }
+    const nm=ov.querySelector('.iu-name'); if(nm) nm.textContent=info.name;
+    const ds=ov.querySelector('.iu-desc'); if(ds) ds.textContent=info.desc;
+    ov.classList.add('show'); try{ haptic('medium'); }catch(e){}
+    try{ playSfx('sfx_reward'); }catch(e){}
+  }
+  function hideItemUnlock(){
+    const ov=document.getElementById('item-unlock-overlay'); if(ov) ov.classList.remove('show');
+    _iuArmed=false;
+    try{ renderPowerups(); }catch(e){}   // 닫은 뒤 버튼이 보유 아이템(배지=1) 반영
+  }
+  // dismiss 버튼 바인딩(1회).
+  (function bindItemUnlock(){
+    const ov=document.getElementById('item-unlock-overlay'); if(!ov) return;
+    const btn=ov.querySelector('.iu-btn');
+    if (btn) btn.addEventListener('click', ()=>{ try{ playSfx('sfx_tap'); }catch(e){} hideItemUnlock(); });
+  })();
+  // loadStage 훅: 해금 첫 진입이면 무료지급+팝업, 아니면 HARD 배너(둘 다 해당 시 팝업 우선 — 인터랙티브).
+  function onStageEntered(){
+    if (_demoStage) return;            // 데모는 제외
+    if (IS_SOLO){                      // 단독/릴스: 구매형 → 무료지급/해금팝업 없음. HARD 배너만.
+      try{ if (STAGES[stageIndex] && STAGES[stageIndex].hard) showHardBanner(); }catch(e){}
+      return;
+    }
+    const level = STAGES[stageIndex] ? STAGES[stageIndex].id : (stageIndex+1);
+    const pend = _pendingUnlock(level);
+    if (pend){
+      _markItemGranted(pend.id);       // 먼저 플래그(중복 방지) → 지급 → 팝업
+      _grantFreeItem(pend.id);
+      _iuArmed=true;
+      try{ renderPowerups(); }catch(e){}   // 지급 즉시 버튼이 보유(배지=1) 표시
+      showItemUnlock(pend);
+      return;                          // 해금 팝업이 HARD 배너보다 우선(인터랙티브)
+    }
+    try{ if (STAGES[stageIndex] && STAGES[stageIndex].hard) showHardBanner(); }catch(e){}
+  }
+
   // 파워업이 '현재 사용 가능'한가.
   //   · 본게임(비-IS_SOLO): (레벨해금 + 무료1회 미사용) OR (매핑 부스터 보유분>0).
   //   · 릴스/단독(IS_SOLO) 구매형: 보유분>0 OR (레벨해금 + 가격존재 + 코인 충분). 무료1회 없음.
@@ -10554,6 +10713,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     playerScoreVal=0;   // 다음 스테이지 코인 보상을 새로 카운트
     renderHUD(); renderSlots(); renderQueue(); renderPowerups(); renderPreview();
     if (!_demoStage){ try{ syncMeta(); }catch(e){} }   // ★ 스테이지 진입 즉시 진행도(현재 레벨) 저장 → 새로고침해도 '정확히 이 레벨'로 복원(예전엔 loadStage가 저장 안 해 한 단계 어긋남)
+    try{ onStageEntered(); }catch(e){}   // 2026-06-26: HARD LEVEL! 배너(#6) + 아이템 해금 팝업·무료1개(#7) — 진입 1회
     try{ obMaybeStart(); }catch(e){}   // 온보딩 튜토리얼: 1스테이지 첫 진입에서만 손가락 힌트 시작
     // DEV-ONLY 디버그 후크: 색깔별 invariant 검증용. 프리뷰/테스트 모드(__TEST_INFINITE_PU)에서만 노출.
     if (window.__TEST_INFINITE_PU){
@@ -12055,16 +12215,16 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     renderSlots(); renderPowerups();
     return true;
   }
-  function blast3x3(center){
+  function blast5x5(center){   // ★ 대포 파괴 범위 5×5×5 (2026-06-26 사용자: 3×3→5×5). 중심 ±2.
     for (const v of voxels){
       if (!v.active) continue;
-      if (Math.abs(v.x-center.x)<=1 && Math.abs(v.y-center.y)<=1 && Math.abs(v.z-center.z)<=1){
+      if (Math.abs(v.x-center.x)<=2 && Math.abs(v.y-center.y)<=2 && Math.abs(v.z-center.z)<=2){
         voxelWorld0(v,_v3); spawnParticles(_v3, v.hex); removeVoxel(v);  // 흰색 플래시 제거
       }
     }
     shakeT=GAME_CONFIG.SHAKE_DURATION;
   }
-  // 대포 projectile: 마스코트에서 발사되어 타겟 복셀로 비행 → 도착 시 blast3x3.
+  // 대포 projectile: 마스코트에서 발사되어 타겟 복셀로 비행 → 도착 시 blast5x5.
   let _rainbowProj=null;
   function _ensureRainbowProj(){
     if (_rainbowProj) return _rainbowProj;
@@ -12108,7 +12268,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     if (t>=1){
       u.flying=false; p.visible=false;
       if (u.targetVoxel && u.targetVoxel.active){
-        blast3x3(u.targetVoxel);
+        blast5x5(u.targetVoxel);
       }
       consumePU('rainbow');
     }
