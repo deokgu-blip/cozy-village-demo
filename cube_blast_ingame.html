@@ -7350,8 +7350,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   let idleTimer=0;
   let crisis=false;
   // ── WARNING / GAME-OVER 상태 (스펙: 5슬롯 풀+발사정지 1s → 경고(빨강 점멸 + 모델 2배속), 추가 5s → 게임오버) ──
-  const WARN_SECONDS=0.0;        // 5슬롯 풀 + 발사정지 '즉시' → 경고(3배속+빨강) 진입(slotFiring 은 연속판정이라 깜빡임 없음, 2026-06-25 사용자 스펙)
-  const GAMEOVER_SECONDS=5.0;    // 경고(3배속 회전) 5초 지속 → 게임오버. 무발사 0+5=5s → 게임오버(2026-06-25 사용자 스펙: "5초동안 3배속 돌다 게임오버")
+  const WARN_SECONDS=1.0;        // ★ 게임오버 트리거(2026-06-26 사용자 스펙 교체): 문어가 '실제로' 총알을 1초간 안 쏘면 경고(빨강+모델 빠른회전) 진입. (이전 0.0=5슬롯풀+막힘추측)
+  const GAMEOVER_SECONDS=5.0;    // 경고(빠른회전) 5초 더 지속(빠르게 돌려도 한 발도 못 쏨) → 게임오버. 빠른회전 중 한 발이라도 쏘면 경고 해제(취소).
   let warning=false;             // 경고 상태(슬롯 빨강 점멸 + 모델 2배속) 활성 여부
   let _warnHold=false;           // DEV: __forceWarn 으로 강제 경고 유지(자연 해제 방지) — 시각 검증용
   let firstDeployDone=false;
@@ -8112,14 +8112,45 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     octoSource=src; useOcto=true;
   }
   // groupRGB(0-1): 큐브 그룹색을 raw 0-1 로(셰이더 raw 곱셈, 큐브 instanceColor 와 동일 비-managed). TINT 정점에 사용.
+  // 옥토 본체색 = '구별 우선' 중간톤 팔레트(2026-06-26 사용자요청). 둥근/음영진 본체는 AO+광택이 명도를 압축해
+  //   파스텔/유사색이 수렴한다(흰↔회색, 연노랑↔노랑↔흰, tan↔노랑 등) → 복셀(평면)보다 명도/색상 분리를 더 줘야
+  //   음영을 견디고 16색이 서로 구별된다. 그래서 본체는 복셀(applyVoxelTint)과 달리 그룹별 '목표 HSL'을 직접 지정한다:
+  //     · 무채(흰/회/검): 명도를 넓게 펼침(흰 L0.82 / 회 L0.13 / 검 L0.02) — 음영 후에도 또렷한 3단.
+  //     · 유채: 색상(hue)은 보존, 채도는 과포화 금지(tan=칙칙한 카키 유지, 형광 아님), 같은 계열 hue 는 명도/채도로 분리.
+  //   복셀과 톤이 동떨어지지 않게 '중간톤'(파스텔↔진한 사이)을 유지하되 구별을 우선한다.
+  // 그룹별 목표 [H(0-1), S, L]. H 는 octoColorHex 의 원 색상에서 따오되, 헷갈리는 계열은 미세 분리.
+  //   ★ 캘리브레이션 메모: 본체 조명(hemi0.8+amb0.4+key0.95+fill0.5+rim0.4)은 밝은 albedo 를 1 로 클립해
+  //     명도를 위쪽으로 압축한다 → '명도'로는 구별이 거의 안 된다. 그래서 albedo 를 의도보다 '어둡고 진하게'
+  //     잡아(렌더 시 ~1.5x 밝아져 의도 톤으로 보임), 구별은 주로 '색상(hue)+채도(chroma)'로 확보한다.
+  //     무채(흰/회/검)는 명도 3단을 최대로 벌리고(흰=clip 밝음, 회=확 어둡게, 검=가장 어둡게).
+  const _OCTO_TARGET = {
+    white:   [0.00, 0.00, 0.82],   // 유일하게 밝게 두는 무채(렌더 시 거의 흰)
+    gray:    [0.00, 0.00, 0.13],   // 아주 어둡게(조명에 밝아져도 흰과 명확히 분리되는 진회색)
+    black:   [0.00, 0.00, 0.02],   // 가장 어두움
+    red:     [0.012,0.94, 0.33],
+    maroon:  [0.945,0.82, 0.28],   // 진한 자홍(red·pink 와 명도/색상 분리)
+    orange:  [0.055,1.00, 0.36],   // 더 붉고 어둡게(금색→주황으로)
+    brown:   [0.070,0.82, 0.20],   // orange 와 같은 hue지만 훨씬 어둡고 → 갈색으로 읽힘
+    yellow:  [0.130,1.00, 0.50],   // 따뜻한 황금노랑(hue 낮춰 R>G → 라임의 황록과 분리)
+    tan:     [0.095,0.64, 0.36],   // 칙칙한 카키(채도 올리고 명도 낮춰 흰·노랑 모두와 분리)
+    lime:    [0.295,1.00, 0.32],   // 샤르트뢰즈(노랑보다 확실히 초록쪽 + 더 어둡게 → 노랑과 분리)
+    green:   [0.375,0.92, 0.26],   // 더 어둡고 청록쪽으로 → lime 과 분리
+    teal:    [0.440,1.00, 0.29],   // 청록(더 어둡고 초록쪽 → skyblue 와 분리)
+    skyblue: [0.580,1.00, 0.50],   // 밝은 하늘(더 파랑쪽 → teal 과 hue 분리, 흰보다 진하게)
+    blue:    [0.625,0.98, 0.31],   // 진한 파랑(skyblue 와 ΔL 큼)
+    purple:  [0.755,0.85, 0.42],
+    pink:    [0.885,0.90, 0.58]    // 밝은 분홍(purple·maroon 과 명도/색상 분리)
+  };
   function _octoGroupRGB(group){
-    // [질감 테스트 2026-06-26 사용자요청] 연결선(_deepenHex)과 동일한 진한 톤(채도↑·명도↓)을 본체색에도 적용.
-    var _c=new THREE.Color(octoColorHex(group));
-    var hsl={}; _c.getHSL(hsl);
+    var t=_OCTO_TARGET[group];
+    if (t){ var _c=new THREE.Color(); _c.setHSL(t[0], t[1], t[2]); return [ _c.r, _c.g, _c.b ]; }
+    // 폴백(미지정 그룹): 복셀과 동일한 중간톤 변환.
+    var _f=new THREE.Color(octoColorHex(group));
+    var hsl={}; _f.getHSL(hsl);
     var sat=hsl.s<0.08 ? 0.0 : Math.min(1, hsl.s*1.35+0.18);
     var lig=hsl.s<0.08 ? Math.min(0.32, hsl.l*0.55) : Math.max(0.16, hsl.l*0.52);
-    _c.lerp(new THREE.Color().setHSL(hsl.h, sat, lig), 0.5);   // 중간 톤(파스텔↔진한 50%, 2026-06-26 사용자요청)
-    return [ _c.r, _c.g, _c.b ];
+    _f.lerp(new THREE.Color().setHSL(hsl.h, sat, lig), 0.5);
+    return [ _f.r, _f.g, _f.b ];
   }
   // ── 발사 반동 미세 떨림(recoil tremor): 본체가 아주 잠깐 흔들림. 위치 지터만(모델 무관 juicy 효과 보존). ──
   // 슬롯 문어만(큐는 X). recoilT 시작 시 base 위치를 캡처해 매 프레임 base+감쇠지터로 복원 → 드리프트 0.
@@ -9052,6 +9083,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     b.hlen=1; b.hx[0]=_v1.x; b.hy[0]=_v1.y; b.hz[0]=_v1.z;
     _clearTrailSlot(b);   // 이전 총알 잔상 제거(첫 이동 프레임부터 그림)
     b.t=0;
+    idleTimer=0;   // ★ 실제 발사 발생 → 무발사 타이머 리셋(게임오버 트리거 기준, 2026-06-26 사용자 스펙)
     return true;
   }
   // 낭비된 총알은 source 캐논에 환불 → voxel=bullet 1:1 매칭 보존.
@@ -9285,7 +9317,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
           c.bullets--; c.inflight++;
           if (c.octo){
             if (c.octo.userData.pumpT < 0) c.octo.userData.pumpT = 0;        // 머리 부풂 펌프(발사마다)
-            triggerOctoRecoil(c.octo);                  // 본체 미세 떨림(발사마다) — 발사 효과음 제거(복셀 깨질 때 sfx_pop만)
+            // [제거 2026-06-26 사용자요청] 발사 반동 미세 떨림 제거: triggerOctoRecoil(c.octo);
             // [ENABLED per user request] 발사 시 조준 yaw(aimYaw): 목표 보셀의 좌우 위치에 따라 살짝 yaw 조준.
             //   octoPuffStep의 회전 보간과 함께 동작 → 문어가 발사 때 목표 쪽으로 미세하게 돈다.
             c.octo.getWorldPosition(_v2); voxelWorld0(tv, _v3);
@@ -9410,6 +9442,13 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   function anySlotFiring(){
     for (const c of slots) if (slotFiring(c)) return true;
     for (const c of extraCannons) if (c && slotFiring(c)) return true;  // 여분 슬롯이 발사 중이면 패배 무력화
+    return false;
+  }
+  // ★ 발사 '가능한'(탄>0·배치완료·소멸/디플로이/락 아님) 문어가 하나라도 있나 — 게임오버 무발사 타이머의 누적 게이트.
+  //   (모두 소진/디플로이 중이면 '발사 기대 안 함' → 무발사여도 카운트 안 함; 발사가능 문어가 있는데 1s 무발사 = 진짜 막힘) (2026-06-26)
+  function anyOctoReadyToFire(){
+    for (let i=0;i<SLOTS;i++){ const c=slots[i]; if (c && (c.bullets|0)>0 && !c.deploying && c.fadeT===undefined && c.kind!=='lock' && c.kind!=='key' && !c.isWideTail) return true; }
+    for (const c of extraCannons){ if (c && (c.bullets|0)>0 && !c.deploying && c.fadeT===undefined) return true; }
     return false;
   }
   function checkWin(){ return activeVoxelCount<=0; }
@@ -12851,23 +12890,20 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
           _awaitOcto = true; _awaitOctoT = 0;
         }
       } else {
-        // fail 두 단계(스펙):
-        //   ① 5슬롯 풀 + 발사정지 1s(WARN_SECONDS)  → 경고(빨강 점멸 + 모델 2배속)
-        //   ② 경고 지속 +5s(GAMEOVER_SECONDS)        → 게임오버(Oops! 버스트 → Out of Space 팝업)
-        // 막힘(stuck) 판정은 기존 idleTimer 재사용. 경고 점멸/2배속은 "5슬롯 풀"일 때만 표시(스펙의 정확한 트리거).
-        const grace = player.dragging || !firstDeployDone || modeSwitchGrace>0;
-        const stuck = !grace && !anySlotFiring() && emptySlotCount()<SLOTS;
-        const allFull = emptySlotCount()===0;   // 메인 5슬롯 모두 채워짐(여분 슬롯은 무관)
-        if (stuck || (!grace && !anySlotFiring() && queueLength()===0 && allSlotsEmpty())){
-          idleTimer+=dt;
+        // ── 게임오버 트리거(2026-06-26 사용자 스펙 교체) ──
+        //   '문어가 실제로 총알을 1초간 안 쏘면'(WARN_SECONDS) → 경고(빨강 + 모델 빠른회전). 빠른회전 중 한 발이라도
+        //   쏘면 경고 해제(취소), 빠르게 돌려도 +5s(GAMEOVER_SECONDS) 더 한 발도 못 쏘면 → 게임오버.
+        //   idleTimer = '마지막 실제 발사 이후 경과'(spawnBullet 성공 시 0 리셋). allFull/매장추측 안 씀 → 5스테이지처럼
+        //   슬롯이 안 차도/표면추측이 빗나가도 '실발사' 기준이라 정확히 잡힌다. 발사간격 0.05s 라 정상플레이는 1s 에 한참 못 미침.
+        const grace = player.dragging || !firstDeployDone || modeSwitchGrace>0 || !!puMode;
+        if (!grace && anyOctoReadyToFire()){
+          idleTimer+=dt;   // 이번 프레임 무발사면 누적(발사 성공 시 spawnBullet 이 idleTimer=0 으로 리셋)
         } else {
-          idleTimer=0;
+          idleTimer=0;     // 드래그/파워업/그레이스/발사가능 문어 없음(디플로이·소진 전환) → 카운트 정지
         }
-        // 경고: 5슬롯 풀 + 막힘 1s 지속. (회복되면 setWarning(false)로 즉시 해제)
-        const wantWarn = stuck && allFull && idleTimer>=WARN_SECONDS;
+        const wantWarn = idleTimer>=WARN_SECONDS;   // 무발사 1s → 경고+빠른회전
         if (wantWarn && !warning) setWarning(true);
-        else if (!wantWarn && warning && !_warnHold && (!stuck || !allFull)) setWarning(false);   // _warnHold: DEV 강제 경고 유지
-        // 게임오버: 경고가 추가 5s 지속(=총 WARN+GAMEOVER 막힘)
+        else if (!wantWarn && warning && !_warnHold) setWarning(false);   // 한 발 쏘면 idleTimer=0 → wantWarn=false → 경고 해제
         if (warning && (idleTimer>=WARN_SECONDS+GAMEOVER_SECONDS || (_warnHold && _warnHold==='over'))){
           phase='failed'; idleTimer=0; _warnHold=false; setWarning(false); triggerGameOver();   // Oops! 버스트 → 팝업
         }
