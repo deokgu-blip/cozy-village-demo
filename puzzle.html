@@ -4543,10 +4543,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:23px; font-weight:400;
     display:inline-flex; align-items:stretch; white-space:nowrap;
     /* 투톤 배경: 좌(진초록) → 가운데 부드러운 전환 → 우(밝은 초록/골드). 분리선 없이 색만 나뉨. */
-    background:linear-gradient(100deg,
-      #1f7a2c 0%, #228a31 36%,
-      #4fc24a 50%,
-      #8fe05a 64%, #b7e85f 100%); }
+    background:linear-gradient(180deg, #6cd35d 0%, #46b237 52%, #31912a 100%); }   /* ★ 깔끔한 세로 글로시 그린(2026-06-26 사용자: 기존 좌우 투톤 그라데이션 이상함 → 단일 톤) */
   /* 윗면 글로시 하이라이트(.pix-btn 입체감 보강) — 면 내부 선 아님, 광택만 */
   #over-continue::before { content:''; position:absolute; left:0; right:0; top:0; height:48%;
     background:linear-gradient(180deg, rgba(255,255,255,.42), rgba(255,255,255,0));
@@ -4559,7 +4556,21 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   #over-continue #over-spring-x { font-size:22px; text-shadow:0 2px 0 rgba(0,60,18,.6); }
   #over-continue .over-coin { width:26px; height:26px; background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%,#ffe79a,#f5a623))) center/contain no-repeat; filter:drop-shadow(0 1px 2px rgba(0,0,0,.3)); }
   #over-continue #over-cost { font-size:22px; text-shadow:0 2px 0 rgba(90,60,0,.45); }
-  #over-continue.poor { filter:grayscale(.55) brightness(.92); }
+  #over-continue.poor { filter:grayscale(1) brightness(.8); opacity:.82; cursor:not-allowed; }   /* ★ 코인 부족: 확실히 회색·비활성(2026-06-26 사용자) */
+  /* ★ Retry 버튼(2026-06-26 사용자): 게임오버 팝업에 항상. 단일 글로시 블루(이어하기 그린과 구분). */
+  #over-retry { display:block; width:236px; max-width:100%; margin:11px auto 0; padding:13px 16px; cursor:pointer;
+    font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:22px; font-weight:400; color:#fff;
+    letter-spacing:.5px; text-shadow:0 2px 0 rgba(20,50,90,.55);
+    background:linear-gradient(180deg, #5aa9f2 0%, #3d86d8 52%, #2f6dbd 100%); }
+  #over-retry .over-retry-ico { display:inline-block; margin-right:7px; transform:translateY(2px); }
+  /* ★ 코인 부족 토스트(2026-06-26 사용자): 작게, 아트톤(네이비 카드+코인 아이콘). */
+  #coin-toast { position:absolute; left:50%; top:84px; transform:translate(-50%,-14px); z-index:90; pointer-events:none;
+    display:flex; align-items:center; gap:8px; padding:9px 15px; border-radius:13px; white-space:nowrap;
+    background:rgba(16,28,54,.95); border:2px solid #38507e; box-shadow:0 4px 0 rgba(6,14,32,.6),inset 0 2px 0 rgba(255,255,255,.12);
+    font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:14px; color:#ffe0b0; letter-spacing:.3px; text-shadow:0 1px 0 #0b1d3e;
+    opacity:0; transition:opacity .18s, transform .18s; }
+  #coin-toast.show { opacity:1; transform:translate(-50%,0); }
+  #coin-toast .ct-coin { width:20px; height:20px; flex:0 0 auto; background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%,#ffe79a,#f5a623))) center/contain no-repeat; filter:drop-shadow(0 1px 1px rgba(0,0,0,.3)); }
   @keyframes overShake { 0%,100%{transform:translateX(0);} 20%{transform:translateX(-9px);} 40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(4px);} }
   /* ===== "Oops!" 게임오버 버스트 (화면 중앙 팝 + 큐티 별/반짝이 파티클, 뒤 어둡게) ===== */
   #oops-burst { position:absolute; inset:0; z-index:71; display:none; align-items:center; justify-content:center; pointer-events:none; }
@@ -4695,8 +4706,12 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
           <span id="over-spring-row" class="over-half"><span class="over-spring-icon"></span><span id="over-spring-x">×3</span></span>
           <span id="over-cost-row" class="over-half"><span class="over-coin"></span><span id="over-cost">900</span></span>
         </button>
+        <button id="over-retry" class="pix-btn"><span class="over-retry-ico">↻</span>Retry</button>
       </div>
     </div>
+
+    <!-- 코인 부족 토스트(작게, 아트톤) -->
+    <div id="coin-toast"><span class="ct-coin"></span><span class="ct-msg">코인이 부족합니다</span></div>
 
     <!-- 디오라마 제작 화면(클리어 직후) -->
     <div id="make-overlay">
@@ -6771,8 +6786,10 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   const _tintC = new THREE.Color();
   function applyVoxelTint(v){
     if (!voxelMesh) return;
-    _tintC.setHex(hexToInt(v.hex));
-    { var _h={}; _tintC.getHSL(_h); var _s=_h.s<0.08?0.0:Math.min(1,_h.s*1.35+0.18); var _l=_h.s<0.08?Math.min(0.32,_h.l*0.55):Math.max(0.16,_h.l*0.52); _tintC.lerp(new THREE.Color().setHSL(_h.h,_s,_l), 0.5); }   // [질감 테스트] 중간 톤(파스텔↔진한 50%, 2026-06-26 사용자요청)
+    // ★ 복셀색 = 문어색 통일(2026-06-26 사용자: 문어↔복셀 대응이 한눈에 보이게). 문어 본체와 동일한 _OCTO_TARGET HSL 사용.
+    { var _vg=groupOf(v.hex); var _vt=_OCTO_TARGET[_vg];
+      if (_vt){ _tintC.setHSL(_vt[0],_vt[1],_vt[2]); }
+      else { _tintC.setHex(hexToInt(v.hex)); var _h={}; _tintC.getHSL(_h); var _s=_h.s<0.08?0.0:Math.min(1,_h.s*1.35+0.18); var _l=_h.s<0.08?Math.min(0.32,_h.l*0.55):Math.max(0.16,_h.l*0.52); _tintC.lerp(new THREE.Color().setHSL(_h.h,_s,_l), 0.5); } }
     if (v.maxHp>1){
       // 하드/장갑: 무손상에도 살짝 어둡게(장갑임을 식별) + 피격마다 더 어둡고 회색쪽으로(균열·검댕).
       const dmg = 1 - (v.hp-1)/(v.maxHp-1);          // 0(무손상)..1(마지막 1HP)
@@ -7344,6 +7361,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     if (m){ try{ CB.addCoins(m, d); CB.saveMeta(m); coinBalance=m.wallet.coins|0; }catch(e){ coinBalance=Math.max(0,coinBalance+d); } }
     else { coinBalance=Math.max(0,coinBalance+d); }
     _coinDisplay(coinBalance); META.coins=coinBalance;
+    try{ sendGameState(); }catch(e){}   // ★ 코인 변동 → 앱에 상태(코인 잔액 포함) 저장(2026-06-26 사용자: 차감 이벤트 기록·유저정보 저장). __GR.active(릴스/단독)일 때만 발신.
   }
   // 클리어 후 "모든 문어 소멸 → 결과창" 대기 상태
   let _awaitOcto=false, _clearPayload=null, _awaitOctoT=0;
@@ -7434,9 +7452,33 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   }
   // ★ 릴스/단독(IS_SOLO) 구매형 모델: 이 파워업의 코인 가격(매핑 부스터 가격, 없으면 null).
   //   boosterPrice 는 CB 모듈 내부 함수 → 게임 스코프에선 CB.boosterPrice 로 접근(직접 참조 시 ReferenceError).
+  // ★ 폴백 코인 가격(2026-06-26 사용자: 아이템 써도 코인 안 줄던 버그 — 공용 balance 에 가격이 없으면 차감이 통째로 스킵됐음).
+  //   CB.boosterPrice 가 null 이면 이 값으로 → 보유분(무료/구매) 소진 후엔 사용마다 코인 차감.
+  const PU_PRICE = { magnet:150, wand:200, extra:250, rainbow:300, vacuum:350 };
   function puPriceFor(puId){
-    const bid = PU_BOOSTER[puId]; if(!bid) return null;
-    try{ return (window.CB && CB.boosterPrice) ? CB.boosterPrice(bid) : null; }catch(e){ return null; }
+    const bid = PU_BOOSTER[puId];
+    let p=null;
+    if (bid){ try{ p=(window.CB && CB.boosterPrice) ? CB.boosterPrice(bid) : null; }catch(e){ p=null; } }
+    if (p==null) p = (PU_PRICE[puId]!=null) ? PU_PRICE[puId] : null;
+    return p;
+  }
+  // ★ 이 파워업이 '코인 부족' 때문에 못 쓰는 상태인가(미해금/없음과 구분) → 부족 토스트 트리거용. (2026-06-26)
+  function puCantAfford(puId){
+    if (window.__TEST_INFINITE_PU) return false;
+    const def=POWERUPS.find(x=>x.id===puId); if(!def) return false;
+    if (boosterInvForPu(puId)>0) return false;                 // 보유분 있으면 코인부족 아님(무료 소진 전)
+    const level=STAGES[stageIndex]?STAGES[stageIndex].id:1;
+    const price=puPriceFor(puId);
+    return (level>=def.unlock) && price!=null && (coinBalance|0) < price;
+  }
+  // ★ 코인 부족 토스트 표시(작게, 자동 숨김). (2026-06-26 사용자)
+  let _coinToastT=null;
+  function showCoinToast(msg){
+    const t=document.getElementById('coin-toast'); if(!t) return;
+    if (msg){ const m=t.querySelector('.ct-msg'); if(m) m.textContent=msg; }
+    t.classList.add('show'); try{ haptic('light'); }catch(e){}
+    if (_coinToastT) clearTimeout(_coinToastT);
+    _coinToastT=setTimeout(()=>t.classList.remove('show'), 1500);
   }
   // 파워업이 '현재 사용 가능'한가.
   //   · 본게임(비-IS_SOLO): (레벨해금 + 무료1회 미사용) OR (매핑 부스터 보유분>0).
@@ -11275,7 +11317,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   // Continue(코인 지불) → 좌측 3슬롯 옥토퍼스를 위 줄(여분 슬롯)로 튕겨 0,1,2번 비움 → 재개
   function continueGame(){
     const cost=continueCost();
-    if (coinBalance<cost){ const c=document.getElementById('over-card'); c.style.animation='none'; void c.offsetWidth; c.style.animation='overShake .42s'; return; }
+    if (coinBalance<cost){ showCoinToast(); const c=document.getElementById('over-card'); c.style.animation='none'; void c.offsetWidth; c.style.animation='overShake .42s'; return; }
     addCoins(-cost);
     // 기존 위 줄(스프링 파워업으로 올라간 옥토퍼스 등)이 있으면 3D 메시까지 정리 후 새로 구성(메시 누수 방지).
     eachExtra(c=>{ if (c.octo) disposeOcto(c.octo); }); extraCannons=[];
@@ -11429,6 +11471,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     }catch(e){ return null; }
   };
   document.getElementById('over-continue').addEventListener('click', continueGame);
+  document.getElementById('over-retry').addEventListener('click', declineGameOver);   // ★ Retry = 현재 스테이지 처음부터(2026-06-26 사용자) — X 와 동일(하트 1 소모 후 재시작)
   document.getElementById('over-close').addEventListener('click', declineGameOver);
   // 처음부터 다시 시작 — 스테이지 0 + 모든 파워업 사용 기록 리셋
   function restartFromStart(){
@@ -12347,7 +12390,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     e.stopPropagation();
     if (el.classList.contains('disabled')) return;                   // 비활성 버튼 클릭 무시
     const id=el.dataset.id; if (!id) return;
-    if (!puAvailable(id)) return;                                    // 무료1회 OR 상점 부스터 보유분(Phase 9)
+    if (!puAvailable(id)){ if (puCantAfford(id)) showCoinToast(); return; }   // ★ 코인 부족이면 토스트(2026-06-26), 그 외(미해금)는 조용히 무시
     activatePowerup(id);
   });
   elSlots.addEventListener('pointerdown', e=>{
@@ -12896,10 +12939,11 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
         //   idleTimer = '마지막 실제 발사 이후 경과'(spawnBullet 성공 시 0 리셋). allFull/매장추측 안 씀 → 5스테이지처럼
         //   슬롯이 안 차도/표면추측이 빗나가도 '실발사' 기준이라 정확히 잡힌다. 발사간격 0.05s 라 정상플레이는 1s 에 한참 못 미침.
         const grace = player.dragging || !firstDeployDone || modeSwitchGrace>0 || !!puMode;
-        if (!grace && anyOctoReadyToFire()){
+        const allFull = emptySlotCount()===0;   // ★ Out of Space = 5슬롯 다 찼을 때만. 빈 슬롯 있으면 배치로 풀 수 있어 카운트 안 함(2026-06-26 사용자: 안 찼는데 게임오버 오발동 수정)
+        if (!grace && allFull && anyOctoReadyToFire()){
           idleTimer+=dt;   // 이번 프레임 무발사면 누적(발사 성공 시 spawnBullet 이 idleTimer=0 으로 리셋)
         } else {
-          idleTimer=0;     // 드래그/파워업/그레이스/발사가능 문어 없음(디플로이·소진 전환) → 카운트 정지
+          idleTimer=0;     // 빈 슬롯 있음/드래그/파워업/그레이스/발사가능 문어 없음 → 카운트 정지
         }
         const wantWarn = idleTimer>=WARN_SECONDS;   // 무발사 1s → 경고+빠른회전
         if (wantWarn && !warning) setWarning(true);
