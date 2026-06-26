@@ -6371,7 +6371,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     return tx;
   }
   // 프리미엄 토이블록: 환경맵 반사(envMapIntensity)로 면에 윤기 + 약간의 metalness. 과한 반짝임은 envMapIntensity로 절제.
-  let voxelMat = new THREE.MeshStandardMaterial({ roughness:0.95, metalness:0.0, map:makeVoxelTexture() });
+  let voxelMat = new THREE.MeshStandardMaterial({ roughness:0.42, metalness:0.05 });   // [질감 테스트 2026-06-26] 문어 finish(매끈·맵 제거)
 
   // ── GIMMICK 아트 공용 헬퍼 ──────────────────────────────────────────────────────────
   //   loadedImages[slotId](HTMLImageElement)에서 THREE.Texture 를 1회 생성·캐시한다.
@@ -6421,7 +6421,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
         const sx=(g.boundingBox.max.x-g.boundingBox.min.x)||1;
         g.scale(1/sx,1/sx,1/sx);            // 1유닛 큐브 → 격자 간격 1에 딱 맞음(flush)
         voxelGeoResolved=g;
-        voxelMatResolved=new THREE.MeshStandardMaterial({ roughness:0.95, metalness:0.0, map:makeVoxelTexture() });
+        voxelMatResolved=new THREE.MeshStandardMaterial({ roughness:0.42, metalness:0.05 });   // [질감 테스트 2026-06-26] 문어 finish(매끈·맵 제거)
         return;
       }
     }
@@ -6772,6 +6772,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   function applyVoxelTint(v){
     if (!voxelMesh) return;
     _tintC.setHex(hexToInt(v.hex));
+    { var _h={}; _tintC.getHSL(_h); var _s=_h.s<0.08?0.0:Math.min(1,_h.s*1.35+0.18); var _l=_h.s<0.08?Math.min(0.32,_h.l*0.55):Math.max(0.16,_h.l*0.52); _tintC.lerp(new THREE.Color().setHSL(_h.h,_s,_l), 0.5); }   // [질감 테스트] 중간 톤(파스텔↔진한 50%, 2026-06-26 사용자요청)
     if (v.maxHp>1){
       // 하드/장갑: 무손상에도 살짝 어둡게(장갑임을 식별) + 피격마다 더 어둡고 회색쪽으로(균열·검댕).
       const dmg = 1 - (v.hp-1)/(v.maxHp-1);          // 0(무손상)..1(마지막 1HP)
@@ -6843,6 +6844,16 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     const list=colorVoxelList[group];
     if (!list) return false;
     for (let i=0;i<list.length;i++){ if (list[i].active) return true; }
+    return false;
+  }
+  // 색에 '표면(surface)' 보셀이 1개라도 있는가 — 곧(회전이 앞면으로 돌리면) 발사 가능한가.
+  //   colorHasAny(완전 매장 색도 true)와 달리, 다른 색에 완전히 파묻혀 영영 못 쏘는 색은 false.
+  //   isSurface 는 카메라/회전 무관 기하판정(빈 이웃 1개라도) → colorHasVisible 의 회전 깜빡임 없이 '진짜 막힘'만 잡는다.
+  //   (예약 voxel=총알 비행중=발사중이므로 surface 면 포함.) 데드락(5슬롯 색 전부 매장) 게임오버 판정용. (2026-06-26)
+  function colorHasSurface(group){
+    const list=colorVoxelList[group];
+    if (!list) return false;
+    for (let i=0;i<list.length;i++){ const v=list[i]; if (v.active && isSurface(v)) return true; }
     return false;
   }
 
@@ -7693,7 +7704,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       // 채도↑(파스텔 본체와 대비), 명도↓(어두운 띠). 무채색(채도≈0)은 임의 회색이 아니라 진한 차콜.
       const sat=hsl.s<0.08 ? 0.0 : Math.min(1, hsl.s*1.35+0.18);
       const lig=hsl.s<0.08 ? Math.min(0.32, hsl.l*0.55) : Math.max(0.16, hsl.l*0.52);
-      _dc.setHSL(hsl.h, sat, lig);
+      _dc.lerp(new THREE.Color().setHSL(hsl.h, sat, lig), 0.5);   // 끈도 중간 톤(파스텔↔진한 50%, 문어/복셀과 동일, 2026-06-26 사용자요청)
       return _dc.getHex();
     }
     function metalMatHex(hex){
@@ -8102,8 +8113,13 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   }
   // groupRGB(0-1): 큐브 그룹색을 raw 0-1 로(셰이더 raw 곱셈, 큐브 instanceColor 와 동일 비-managed). TINT 정점에 사용.
   function _octoGroupRGB(group){
-    const hex=octoColorHex(group);
-    return [ ((hex>>16)&255)/255, ((hex>>8)&255)/255, (hex&255)/255 ];
+    // [질감 테스트 2026-06-26 사용자요청] 연결선(_deepenHex)과 동일한 진한 톤(채도↑·명도↓)을 본체색에도 적용.
+    var _c=new THREE.Color(octoColorHex(group));
+    var hsl={}; _c.getHSL(hsl);
+    var sat=hsl.s<0.08 ? 0.0 : Math.min(1, hsl.s*1.35+0.18);
+    var lig=hsl.s<0.08 ? Math.min(0.32, hsl.l*0.55) : Math.max(0.16, hsl.l*0.52);
+    _c.lerp(new THREE.Color().setHSL(hsl.h, sat, lig), 0.5);   // 중간 톤(파스텔↔진한 50%, 2026-06-26 사용자요청)
+    return [ _c.r, _c.g, _c.b ];
   }
   // ── 발사 반동 미세 떨림(recoil tremor): 본체가 아주 잠깐 흔들림. 위치 지터만(모델 무관 juicy 효과 보존). ──
   // 슬롯 문어만(큐는 X). recoilT 시작 시 base 위치를 캡처해 매 프레임 base+감쇠지터로 복원 → 드리프트 0.
@@ -9385,9 +9401,11 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     if (c.deploying) return true;
     if (c.fadeT!==undefined) return true;  // 소멸 애니메이션 중에는 idle 카운트 방지
     if (c.bullets<=0) return false;
-    // 색이 남아있으면 firing 가능으로 간주(회전으로 잠시 가려졌어도 곧 보임).
-    // colorHasVisible 대신 colorHasAny 사용 → 5슬롯 모두 0개 남은 색일 때만 idle 누적.
-    return colorHasAny(c.color);
+    // 표면 보셀이 있으면 firing 가능으로 간주(회전으로 잠시 뒤로 가려졌어도 isSurface 면 곧 앞면으로 와 발사).
+    //   ★ colorHasAny→colorHasSurface 로 변경(2026-06-26 버그수정): colorHasAny 는 '완전히 파묻혀 영영 못 쏘는 색'도
+    //   firing 으로 봐서, 5슬롯 문어가 다 막혀(매장) 멈췄는데도 idle 이 안 쌓여 게임오버가 안 떴음. surface 는
+    //   회전무관 기하판정이라 colorHasVisible(카메라가시) 같은 깜빡임 없이 '진짜 데드락'만 잡는다.
+    return colorHasSurface(c.color);
   }
   function anySlotFiring(){
     for (const c of slots) if (slotFiring(c)) return true;
