@@ -4406,10 +4406,11 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     display:flex; align-items:center; gap:9px; padding:10px 22px; margin-bottom:10px;
     background:rgba(8,18,40,.55); border-radius:16px; border:3px solid rgba(124,196,255,.7); box-shadow:0 4px 0 rgba(0,0,0,.35);
   }
+  /* ★ 보상 큐브 아이콘: 평평한 파란 사각형(플레이스홀더처럼 보임) → 입체 토이블록 느낌으로(2026-06-26 시각QA BUG1) */
   #clear-blocks .block-bigicon {
-    width:32px; height:32px; border-radius:8px;
-    background:linear-gradient(135deg,#9ed1ff 0%,#3989f5 100%);
-    box-shadow:inset 0 2px 3px rgba(255,255,255,.45), 0 2px 4px rgba(0,0,0,.4);
+    width:30px; height:30px; border-radius:7px;
+    background:linear-gradient(155deg,#cdebff 0%,#7bbcf7 48%,#3a82de 100%);
+    box-shadow:inset 0 4px 2px rgba(255,255,255,.6), inset -3px -5px 4px rgba(16,52,110,.55), inset 0 0 0 1.5px rgba(255,255,255,.28), 0 3px 4px rgba(0,0,0,.4);
   }
   #clear-blocks .block-val { font-size:27px; font-weight:900; color:#cfe6ff; text-shadow:0 2px 3px rgba(0,0,0,.5); }
 
@@ -9733,9 +9734,10 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     el.style.height = h+'px';
     el.style.background = color;
     el.style.borderRadius = isStar ? '50%' : '2px';
-    elClearConfetti.appendChild(el);
     const startX = Math.random()*W;
     const startY = -30 - Math.random()*120;
+    el.style.transform = `translate3d(${startX|0}px, ${startY|0}px, 0)`;   // ★ 생성 즉시 초기위치(화면 위 밖) → (0,0) 1프레임 깜빡임 방지(2026-06-26 시각QA BUG2)
+    elClearConfetti.appendChild(el);
     const vx = (Math.random()*2 - 1) * 28;       // 좌우 흔들림 살짝 더 감소
     const vy = 8 + Math.random()*18;             // 초기 낙하 속도(이전 15~45 → 8~26) ~절반
     const ay = 40 + Math.random()*30;            // 중력 (이전 80~130 → 40~70) ~절반
@@ -9768,6 +9770,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       el.style.background = (Math.random()<0.7) ? main : CONFETTI_COLORS[(Math.random()*CONFETTI_COLORS.length)|0];
       el.style.borderRadius = '50%';
       el.style.boxShadow = '0 0 6px ' + (el.style.background);  // 글로우 효과
+      el.style.transform = `translate3d(${ox|0}px, ${oy|0}px, 0)`;   // ★ 생성 즉시 초기위치(화면 가장자리) → (0,0) 깜빡임 방지(2026-06-26 시각QA)
       elClearConfetti.appendChild(el);
       _confettiPieces.push({
         el, x:ox, y:oy, vx, vy, ay: 180,        // 약한 중력
