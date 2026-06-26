@@ -10528,10 +10528,11 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   // ════════════════════════════════════════════════════════════════════════════════
   const DEMO_STAGES = {
     // 1) 하드/장갑 블록(다중 명중): hp>1 복셀은 피격마다 어두워지고(applyVoxelTint) 균열 데칼(crack 1→2→3)이 진행,
-    //    hp=0 에서만 파괴. 호박(m7) 오렌지 껍질 전체를 hp2 장갑으로 → 모델 표면 절반이 '갈라지는 장갑'으로 보인다.
+    //    hp=0 에서만 파괴. m7 정면(카메라쪽) 2켜를 hp2 장갑으로 → 모델 앞면이 '갈라지는 장갑'으로 보인다.
+    //    (이전 sel=groupOf==='orange' 는 m7 에 orange 그룹이 없어 장갑 0개였음 — 색무관 공간 셀렉터로 수정, 2026-06-26 QA)
     hard:{ label:'하드블록 (Hard Blocks)', soon:false, build(){
       return demoFromModel('m7', { name:'HARD',
-        regions:[ { sel:v=>groupOf(v.c)==='orange', hp:2 } ],   // 오렌지 껍질 = 장갑 hp2(눈에 띄는 영역)
+        regions:[ { sel:(v,B)=> v.z>=B.maxz-1, hp:2 } ],   // 정면 2켜 = 장갑 hp2(모델 색 무관·항상 존재)
         octo:{ chunk:14 } });
     }},
     // 2) 🔒🔑 잠금+열쇠(정정된 메커닉): LOCK·KEY 는 보셀이 아니라 '독립 큐 아이템'(옥토-크기)이다.
