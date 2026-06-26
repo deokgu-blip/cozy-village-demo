@@ -7566,6 +7566,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     if (_hardBannerT) clearTimeout(_hardBannerT);
     _hardBannerT=setTimeout(()=>{ b.classList.remove('show'); }, 1950);   // 애니메이션 길이와 동기
   }
+  function hideHardBanner(){ const b=document.getElementById('hard-banner'); if(b) b.classList.remove('show'); if(_hardBannerT) clearTimeout(_hardBannerT); }   // ★ 비-HARD 진입 시 잔여 배너 즉시 제거(2026-06-26 QA P4)
 
   // ═══ ITEM UNLOCK 팝업 + 무료 1개 지급(2026-06-26 #7) ════════════════════════
   //   각 아이템의 해금 레벨(POWERUPS[].unlock) 첫 진입 시: ① 부스터 1개 무료 지급(once, localStorage 플래그)
@@ -7622,6 +7623,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   // loadStage 훅: 해금 첫 진입이면 무료지급+팝업, 아니면 HARD 배너(둘 다 해당 시 팝업 우선 — 인터랙티브).
   function onStageEntered(){
     if (_demoStage) return;            // 데모는 제외
+    hideHardBanner();                  // ★ 진입마다 잔여 HARD 배너 제거 → hard 스테이지일 때만 아래에서 다시 표시(QA P4)
     if (IS_SOLO){                      // 단독/릴스: 구매형 → 무료지급/해금팝업 없음. HARD 배너만.
       try{ if (STAGES[stageIndex] && STAGES[stageIndex].hard) showHardBanner(); }catch(e){}
       return;
