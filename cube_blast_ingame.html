@@ -4830,7 +4830,6 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
         <div class="iu-icon-wrap"><div class="iu-glow"></div><img class="iu-icon ib-icon" alt=""></div>
         <div class="iu-name ib-name"></div>
         <div class="iu-desc ib-desc"></div>
-        <div class="ib-price"><i class="ib-price-coin"></i><span class="ib-price-val"></span></div>
         <div class="ib-actions">
           <button class="ib-buy pix-btn"><i class="ib-buy-coin"></i><span class="ib-buy-val"></span></button>
         </div>
@@ -7698,7 +7697,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     const nm=ov.querySelector('.ib-name'); if(nm) nm.textContent=info.name;
     const ds=ov.querySelector('.ib-desc'); if(ds) ds.textContent=info.desc;
     const pv=ov.querySelector('.ib-price-val'); if(pv) pv.textContent=(price!=null?price:'');
-    const bv=ov.querySelector('.ib-buy-val'); if(bv) bv.textContent='Buy';   // 버튼 라벨 'Buy'만(숫자 제거 — 가격은 위 .ib-price 행에 표시, 2026-06-27 사용자)
+    const bv=ov.querySelector('.ib-buy-val'); if(bv) bv.textContent=(price!=null?price:'');   // ★ 버튼에 가격 표시(2026-06-27 사용자: Buy 대신 가격, 별도 가격행 제거 → 버튼에만)
     _ibRefreshBuyState();
     ov.classList.add('show'); try{ haptic('light'); }catch(e){}
     try{ playSfx('sfx_tap'); }catch(e){}
