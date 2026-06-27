@@ -7529,13 +7529,22 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   //   boosterPrice 는 CB 모듈 내부 함수 → 게임 스코프에선 CB.boosterPrice 로 접근(직접 참조 시 ReferenceError).
   // ★ 폴백 코인 가격(2026-06-26 사용자: 아이템 써도 코인 안 줄던 버그 — 공용 balance 에 가격이 없으면 차감이 통째로 스킵됐음).
   //   CB.boosterPrice 가 null 이면 이 값으로 → 보유분(무료/구매) 소진 후엔 사용마다 코인 차감.
-  const PU_PRICE = { magnet:150, wand:200, extra:250, rainbow:300, vacuum:350 };
+  // ★ 릴스(IS_SOLO) 전용 재화밸런스(2026-06-27 사용자: 릴스빌드 재화 재조정). 릴스는 이 표가 단일 출처(공용 balance.js 무시) → 여기서 자유 튜닝.
+  //   아이템 가격 전반 인하 + 대포(rainbow) 80 으로 특히 인하(효율 보정). 본게임(로비)은 기존 CB.boosterPrice 유지.
+  const REELS_PRICE = { magnet:60, wand:60, extra:90, rainbow:80, vacuum:140 };
+  const PU_PRICE = { magnet:150, wand:200, extra:250, rainbow:300, vacuum:350 };   // 폴백(비-IS_SOLO·CB가격 없을 때)
   function puPriceFor(puId){
+    if (IS_SOLO){ return (REELS_PRICE[puId]!=null) ? REELS_PRICE[puId] : null; }   // 릴스: 전용 표(공용 balance 무시)
     const bid = PU_BOOSTER[puId];
     let p=null;
     if (bid){ try{ p=(window.CB && CB.boosterPrice) ? CB.boosterPrice(bid) : null; }catch(e){ p=null; } }
     if (p==null) p = (PU_PRICE[puId]!=null) ? PU_PRICE[puId] : null;
     return p;
+  }
+  // ★ 릴스(IS_SOLO) 스테이지 클리어 코인 보상(2026-06-27 사용자: 스테이지당 벌이가 너무 적음 → 상향). 일반 60 / HARD 120. (이전 고정 20)
+  function soloClearReward(){
+    const hard = !!(STAGES[stageIndex] && STAGES[stageIndex].hard);
+    return hard ? 120 : 60;
   }
   // ★ 이 파워업이 '코인 부족' 때문에 못 쓰는 상태인가(미해금/없음과 구분) → 부족 토스트 트리거용. (2026-06-26)
   function puCantAfford(puId){
@@ -9786,13 +9795,13 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     // 온보딩이 아직 떠 있으면(예: 드래그 전에 클리어) 결과창과 겹치지 않게 종료/숨김.
     try{ if (_obStep){ _obStep=0; try{ localStorage.setItem('cb_onboard_done','1'); }catch(e){} if(typeof obRender==='function') obRender(); } }catch(e){}
     if (IS_SOLO){
-      // ★ 단독 모드: 클리어당 코인 +20 지급(재플레이 없음). 큐브 행 숨기고 코인 행 표시 + 잔액 적립·저장.
+      // ★ 단독/릴스 모드: 클리어당 코인 보상(재플레이 없음). 큐브 행 숨기고 코인 행 표시 + 잔액 적립·저장. (2026-06-27 +20 → soloClearReward: 60/HARD120)
       const _cb2=document.getElementById('clear-blocks'); if(_cb2) _cb2.style.display='none';
       const _cc=document.getElementById('clear-coin'); if(_cc) _cc.style.display='';
-      coinBalance=(coinBalance|0)+20; META.coins=coinBalance;
+      const _solRw=soloClearReward(); coinBalance=(coinBalance|0)+_solRw; META.coins=coinBalance;
       try{ if(typeof _coinDisplay==='function') _coinDisplay(coinBalance); }catch(e){}
       try{ syncMeta(); }catch(e){}
-      if (elClearCoinVal) elClearCoinVal.textContent='+20';
+      if (elClearCoinVal) elClearCoinVal.textContent='+'+_solRw;
     } else {
       const _cc=document.getElementById('clear-coin'); if(_cc) _cc.style.display='none';   // 코인 행 제거(로비)
       if (elClearBlockVal) elClearBlockVal.textContent = '+' + (cubeReward|0);
