@@ -4504,7 +4504,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   .ib-actions{ display:flex; gap:11px; }
   .ib-actions .pix-btn{ flex:1 1 0; padding:16px 12px; font-size:23px; letter-spacing:.5px;   /* Cancel 제거 → Buy 단독 풀폭·크게(2026-06-27 사용자: 취소는 우상단 X로) */
     display:flex; align-items:center; justify-content:center; gap:8px; }
-  .ib-buy .ib-buy-val::before{ content:'Buy  '; }   /* 단독 CTA 라 '구매' 의도 명확히: Buy + 가격 */
+  /* (ib-buy-val ::before 제거 — 버튼 라벨은 JS 에서 'Buy' 로 직접 설정, 2026-06-27) */
   /* Cancel = 중립 회청 버튼(.pix-btn 입체 유지, 초록 대신 슬레이트) */
   .ib-cancel{ background:linear-gradient(180deg,#6f86ab 0%,#4f688c 100%); border-color:#374f70;
     box-shadow:0 6px 0 #2c3f5c, 0 9px 14px rgba(0,0,0,.32), inset 0 3px 0 rgba(255,255,255,.32);
@@ -7698,7 +7698,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     const nm=ov.querySelector('.ib-name'); if(nm) nm.textContent=info.name;
     const ds=ov.querySelector('.ib-desc'); if(ds) ds.textContent=info.desc;
     const pv=ov.querySelector('.ib-price-val'); if(pv) pv.textContent=(price!=null?price:'');
-    const bv=ov.querySelector('.ib-buy-val'); if(bv) bv.textContent=(price!=null?price:'Buy');
+    const bv=ov.querySelector('.ib-buy-val'); if(bv) bv.textContent='Buy';   // 버튼 라벨 'Buy'만(숫자 제거 — 가격은 위 .ib-price 행에 표시, 2026-06-27 사용자)
     _ibRefreshBuyState();
     ov.classList.add('show'); try{ haptic('light'); }catch(e){}
     try{ playSfx('sfx_tap'); }catch(e){}
@@ -8201,7 +8201,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       const price = IS_SOLO ? puPriceFor(p.id) : null;
       const canAfford = (price!=null) && ((coinBalance|0) >= price);
       const available = IS_SOLO
-        ? (inv>0 || (levelUnlocked && price!=null && canAfford))
+        ? (inv>0 || levelUnlocked)                                    // ★ 릴스: 해금됐으면 항상 활성(코인부족이어도 탭→구매팝업). (2026-06-27 사용자)
         : (freeReady || inv>0);                                       // 본게임: 무료 OR 부스터 보유(회귀 0)
       let disabled = false;
       if (available){
@@ -8209,9 +8209,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
         if (p.id==='hand' && slotsAllFull) disabled=true;               // 슬롯 꽉 참 → 손 비활성(magnet 동형)
         if (p.id==='extra' && (slotsAllEmpty || firstEmptyExtra()<0)) disabled=true;  // 슬롯 비어있음 또는 위 줄 가득 → 스프링 비활성
       }
-      // 릴스/단독 구매형: 미보유·레벨해금이지만 코인 부족 → .cantafford(회색) + 가격은 계속 표시(살 수 없음 안내).
-      const showPrice = IS_SOLO && inv<=0 && levelUnlocked && price!=null;
-      const cantAfford = showPrice && !canAfford;
+      // ★ 릴스/단독: 미보유·해금 아이템은 버튼에 '+' 표시(가격라벨 제거 — 탭하면 구매팝업). 코인부족 회색칠 안 함(팝업이 처리). (2026-06-27 사용자)
+      const showPlus = IS_SOLO && inv<=0 && levelUnlocked && price!=null;
+      const cantAfford = false;
       const d=document.createElement('div');
       d.className='pu'+(available?'':' locked')+(disabled?' disabled':'')+(cantAfford?' cantafford':''); d.dataset.id=p.id;
       d.dataset.editId='pu-'+p.id;
@@ -8222,10 +8222,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       if (inv > 0){
         // 보유 배지: 인벤토리 보유분이 있으면 '그 개수'를 우선 표시(앱 복원값과 일치 — 2026-06-25 버그수정).
         html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'"><span>'+inv+'</span></div>';
-      } else if (showPrice){
-        // 릴스/단독 구매형: 미보유 + 레벨해금 → 코인 가격 표시(누르면 arm, 효과 확정 시 차감).
-        const coinTint = loadedImages['coin_icon'] ? ' has-icon' : '';
-        html+='<div class="pu-price'+coinTint+'" data-edit-id="pu-price-'+p.id+'"><i class="pu-price-coin"></i><span>'+price+'</span></div>';
+      } else if (showPlus){
+        // 보유 0 + 해금 → '+'(탭하면 구매팝업으로 구입 → 수량 증가).
+        html+='<div class="pu-badge pu-plus" data-edit-id="pu-plus-'+p.id+'"><span>+</span></div>';
       } else if (freeReady){
         // 본게임: 미보유 + 무료1회 → '1'. (IS_SOLO 에선 freeReady 가 위 showPrice 분기로 흡수되어 여기 안 옴.)
         html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'"><span>1</span></div>';
