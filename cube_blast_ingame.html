@@ -7502,7 +7502,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
 
   // ===== power-up state =====
   let puMode=null;                                            // null|'magnet'|'rainbow'|'extra'|'hand'|'shuffle'|'vacuum'|'vacuumSpin'
-  const puUsed={ magnet:false, wand:false, extra:false, rainbow:false, hand:false, shuffle:false, vacuum:false };  // 무료 1회 소진(세션)
+  const puUsed={ magnet:false, wand:false, extra:false, rainbow:false, hand:false, shuffle:false, vacuum:false };  // (dead) per-level 무료1회 폐지(2026-06-27 통합) — 데모 훅/리셋 호환용으로만 잔존
   // 여분 슬롯 블래스터 — 메인 5슬롯 row 바로 위 추가 줄.
   //   스프링 파워업: 1개(맨 왼쪽 위). 게임오버 Continue: 좌측 3슬롯을 위로 튕겨 최대 3개.
   //   배열(extraCannons)로 일반화하되, 단일 스프링 파워업과 공존(아래 코드 전부 배열 순회).
@@ -7581,14 +7581,10 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   //   본게임(로비)은 기존 CB.boosterPrice 유지.
   // ★ 릴스 아이템 가격: 기존 고정가 + 대포(rainbow)만 100 고정 (2026-06-27 사용자: 기존 밸런싱 원복, 대포만 100).
   const REELS_PRICE = { magnet:100, wand:100, extra:200, rainbow:100, vacuum:300 };
-  const PU_PRICE = { magnet:150, wand:200, extra:250, rainbow:300, vacuum:350 };   // 폴백(비-IS_SOLO·CB가격 없을 때)
+  const PU_PRICE = { magnet:150, wand:200, extra:250, rainbow:300, vacuum:350 };   // (구) 폴백 — 통합 후 미사용
+  // ★ 아이템 가격: 본게임/릴스 동일(2026-06-27 통합) → REELS_PRICE 전용표가 모든 빌드의 단일 출처(공용 balance.js 무시).
   function puPriceFor(puId){
-    if (IS_SOLO){ return (REELS_PRICE[puId]!=null) ? REELS_PRICE[puId] : null; }   // 릴스: 전용 표(공용 balance 무시)
-    const bid = PU_BOOSTER[puId];
-    let p=null;
-    if (bid){ try{ p=(window.CB && CB.boosterPrice) ? CB.boosterPrice(bid) : null; }catch(e){ p=null; } }
-    if (p==null) p = (PU_PRICE[puId]!=null) ? PU_PRICE[puId] : null;
-    return p;
+    return (REELS_PRICE[puId]!=null) ? REELS_PRICE[puId] : null;
   }
   // ★ 릴스(IS_SOLO) 스테이지 클리어 코인 보상: 기존 고정 +20 (2026-06-27 사용자: 아이템 안 써도 되는 판 많아 점진형 취소·원복).
   function soloClearReward(){
@@ -7629,7 +7625,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   // ═══ ITEM UNLOCK 팝업 + 무료 1개 지급(2026-06-26 #7) ════════════════════════
   //   각 아이템의 해금 레벨(POWERUPS[].unlock) 첫 진입 시: ① 부스터 1개 무료 지급(once, localStorage 플래그)
   //   ② 아이템 설명 팝업(.pix-card). 설명은 각 아이템의 실제 메커닉(consumePU/arm 프롬프트)을 그대로 반영.
-  //   본게임(비-IS_SOLO)에서만 의미 있음(단독/릴스는 구매형이라 무료지급/해금팝업 비활성).
+  //   ★ 통합(2026-06-27): 본게임/릴스 모든 빌드에서 동작(해금 시 1개 무료 + 팝업). 이후 무료 사용은 없음(구매형).
   const ITEM_INFO = {
     magnet:  { name:'Magnet',   desc:'Tap ANY shooter in the queue and drop it straight into a slot — skip the line!' },
     wand:    { name:'Magic Wand', desc:'Wave it to shuffle all the shooters in the queue into a fresh order.' },
@@ -7759,10 +7755,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   function onStageEntered(){
     if (_demoStage) return;            // 데모는 제외
     hideHardBanner();                  // ★ 진입마다 잔여 HARD 배너 제거 → hard 스테이지일 때만 아래에서 다시 표시(QA P4)
-    if (IS_SOLO){                      // 단독/릴스: 구매형 → 무료지급/해금팝업 없음. HARD 배너만.
-      try{ if (STAGES[stageIndex] && STAGES[stageIndex].hard) showHardBanner(); }catch(e){}
-      return;
-    }
+    // ★ 통합(2026-06-27): 본게임/릴스 동일 — 해금 첫 진입이면 무료 1개 지급 + 해금 팝업(둘 다 빌드).
     const level = STAGES[stageIndex] ? STAGES[stageIndex].id : (stageIndex+1);
     const pend = _pendingUnlock(level);
     if (pend){
@@ -7776,23 +7769,18 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     try{ if (STAGES[stageIndex] && STAGES[stageIndex].hard) showHardBanner(); }catch(e){}
   }
 
-  // 파워업이 '현재 사용 가능'한가.
-  //   · 본게임(비-IS_SOLO): (레벨해금 + 무료1회 미사용) OR (매핑 부스터 보유분>0).
-  //   · 릴스/단독(IS_SOLO) 구매형: 보유분>0 OR (레벨해금 + 가격존재 + 코인 충분). 무료1회 없음.
+  // 파워업이 '현재 사용 가능'한가(통합 구매형, 2026-06-27 — 본게임/릴스 동일).
+  //   보유분>0 → 사용 가능. 인벤 0 → (레벨해금 + 가격존재 + 코인 충분) 이어야 발동 가능(arm 게이트). 무료1회 없음.
   //   테스트 모드는 항상 가능.
   function puAvailable(puId){
     if (window.__TEST_INFINITE_PU) return true;
     const def = POWERUPS.find(x=>x.id===puId); if(!def) return false;
     const level = STAGES[stageIndex] ? STAGES[stageIndex].id : 1;
     const inv = boosterInvForPu(puId);
-    if (IS_SOLO){
-      if (inv>0) return true;
-      const levelUnlocked = level >= def.unlock;
-      const price = puPriceFor(puId);
-      return levelUnlocked && price!=null && (coinBalance|0) >= price;   // 구매형: 살 수 있어야 발동 가능(arm 게이트)
-    }
-    const freeReady = (level >= def.unlock) && !puUsed[puId];   // 무료 1회분
-    return freeReady || inv > 0;
+    if (inv>0) return true;
+    const levelUnlocked = level >= def.unlock;
+    const price = puPriceFor(puId);
+    return levelUnlocked && price!=null && (coinBalance|0) >= price;   // 구매형: 살 수 있어야 발동 가능
   }
 
   function buildSlotsUI(){
@@ -8193,24 +8181,18 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     const slotsAllFull = firstEmptySlot()<0;
     const slotsAllEmpty = !slots.some(s=>s && !s.deploying);
     for (const p of POWERUPS){
+      // ★ 통합 구매형(2026-06-27, 본게임/릴스 동일): 보유분>0 → 수량배지 / 해금·미보유 → '+'(탭=구매팝업) / 미해금 → 'LV n'.
       const levelUnlocked = level>=puUnlockLevel(p);
-      const freeReady = levelUnlocked && !puUsed[p.id];               // 무료 1회분(레벨해금)
-      const inv = boosterInvForPu(p.id);                              // 상점 구매 보유분(Phase 9)
-      // 릴스/단독(구매형): 무료1회 없음 → 보유분>0 또는 (레벨해금 + 가격존재 + 코인충분) 이어야 사용가능.
-      const price = IS_SOLO ? puPriceFor(p.id) : null;
-      const canAfford = (price!=null) && ((coinBalance|0) >= price);
-      const available = IS_SOLO
-        ? (inv>0 || levelUnlocked)                                    // ★ 릴스: 해금됐으면 항상 활성(코인부족이어도 탭→구매팝업). (2026-06-27 사용자)
-        : (freeReady || inv>0);                                       // 본게임: 무료 OR 부스터 보유(회귀 0)
+      const inv = boosterInvForPu(p.id);                              // 상점/지급 보유분(메타 SSOT)
+      const available = inv>0 || levelUnlocked;                       // 해금됐으면 항상 활성(코인부족이어도 탭→구매팝업이 처리)
+      const showPlus = inv<=0 && levelUnlocked;                       // 미보유·해금 → '+'
+      const cantAfford = false;                                       // 해금 아이템은 항상 탭 가능(팝업이 affordability 처리)
       let disabled = false;
       if (available){
         if (p.id==='magnet' && slotsAllFull) disabled=true;             // 슬롯 꽉 참 → 자석 비활성
         if (p.id==='hand' && slotsAllFull) disabled=true;               // 슬롯 꽉 참 → 손 비활성(magnet 동형)
         if (p.id==='extra' && (slotsAllEmpty || firstEmptyExtra()<0)) disabled=true;  // 슬롯 비어있음 또는 위 줄 가득 → 스프링 비활성
       }
-      // ★ 릴스/단독: 미보유·해금 아이템은 버튼에 '+' 표시(가격라벨 제거 — 탭하면 구매팝업). 코인부족 회색칠 안 함(팝업이 처리). (2026-06-27 사용자)
-      const showPlus = IS_SOLO && inv<=0 && levelUnlocked && price!=null;
-      const cantAfford = false;
       const d=document.createElement('div');
       d.className='pu'+(available?'':' locked')+(disabled?' disabled':'')+(cantAfford?' cantafford':''); d.dataset.id=p.id;
       d.dataset.editId='pu-'+p.id;
@@ -8219,14 +8201,11 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       const iconSrc = loadedImages[p.slot] ? loadedImages[p.slot].src : null;
       if (iconSrc) html+='<img class="pu-icon" src="'+iconSrc+'" alt="" data-edit-id="pu-icon-'+p.id+'">';
       if (inv > 0){
-        // 보유 배지: 인벤토리 보유분이 있으면 '그 개수'를 우선 표시(앱 복원값과 일치 — 2026-06-25 버그수정).
+        // 보유 배지: 인벤토리 보유분이 있으면 '그 개수'를 표시(앱 복원값과 일치).
         html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'"><span>'+inv+'</span></div>';
       } else if (showPlus){
         // 보유 0 + 해금 → '+'(탭하면 구매팝업으로 구입 → 수량 증가).
         html+='<div class="pu-badge pu-plus" data-edit-id="pu-plus-'+p.id+'"><span>+</span></div>';
-      } else if (freeReady){
-        // 본게임: 미보유 + 무료1회 → '1'. (IS_SOLO 에선 freeReady 가 위 showPrice 분기로 흡수되어 여기 안 옴.)
-        html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'"><span>1</span></div>';
       } else if (!levelUnlocked){
         html+='<div class="pu-lv" data-edit-id="pu-lv-'+p.id+'">LV '+p.unlock+'</div>';
       }
@@ -12075,40 +12054,29 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     document.body.classList.remove('puactive','puactive-magnet','puactive-wand','puactive-extra','puactive-rainbow','puactive-hand','puactive-shuffle','puactive-vacuum','puactive-vacuumSpin');
   }
   function closePuModal(){ puMode=null; hidePuModal(); updateModeHint(); }
-  // 테스트 빌드(__TEST_INFINITE_PU=true)에서는 파워업이 소진되지 않음(무한 사용). 배포본은 정상 1회 소진.
-  //   소진 우선순위(2026-06-25 변경): ① 보유 인벤토리(m.boosters[id]-- + saveMeta) → ② 보유 0 일 때만 레벨해금 무료 1회분(puUsed).
-  //   (보유분을 먼저 써서 배지=보유수가 사용마다 정확히 줄도록. 앱 복원값과 표시 일치. 무료1회는 보유 0 일 때의 '체험' 용도.)
+  // 테스트 빌드(__TEST_INFINITE_PU=true)에서는 파워업이 소진되지 않음(무한 사용). 배포본은 정상 소진.
+  //   소진(통합 구매형, 2026-06-27): ① 보유 인벤토리(m.boosters[id]-- + saveMeta) → ② 보유 0 이면 코인 가격 직접 차감(직접 구매-사용).
+  //   (per-level 무료 1회분은 폐지 — 무료는 해금 시 1개 지급으로 인벤에 적립됨.)
   function consumePU(id){
     if (!window.__TEST_INFINITE_PU){
-      const level=STAGES[stageIndex]?STAGES[stageIndex].id:1;
-      const def=POWERUPS.find(x=>x.id===id);
       const inv = boosterInvForPu(id);
-      if (IS_SOLO){
-        // ★ 릴스/단독 구매형: 보유분 우선 차감, 없으면 효과 확정 시점에 코인 가격을 차감(직접 구매-사용, 인벤 미적립).
-        if (inv>0){
-          consumeBoosterInv(id);                                    // 보유분 먼저(배지=보유수 정확히 감소)
-        } else {
-          const price = puPriceFor(id);
-          if (price!=null){
-            try{
-              const m = _cbMeta();
-              if (m && window.CB && CB.addCoins && CB.saveMeta){
-                if ((m.wallet.coins|0) >= price){                   // arm 단계서 이미 게이트됨 — 방어적 재확인
-                  CB.addCoins(m, -price); CB.saveMeta(m);
-                  coinBalance = m.wallet.coins|0; META.coins=coinBalance; _coinDisplay(coinBalance);
-                }
-              } else if ((coinBalance|0) >= price){                 // CB 미인라인 폴백
-                coinBalance = Math.max(0, (coinBalance|0) - price); META.coins=coinBalance; _coinDisplay(coinBalance);
-              }
-            }catch(e){}
-          }
-        }
+      // ★ 통합 구매형(2026-06-27, 본게임/릴스 동일): 보유분 우선 차감, 없으면 효과 확정 시점에 코인 가격 차감(직접 구매-사용, 인벤 미적립).
+      if (inv>0){
+        consumeBoosterInv(id);                                    // 보유분 먼저(배지=보유수 정확히 감소)
       } else {
-        const freeReady = def && (level>=def.unlock) && !puUsed[id];
-        if (inv>0){
-          consumeBoosterInv(id);                                    // ① 보유 인벤토리 먼저 차감 → 배지(=보유수)가 사용마다 정확히 감소(앱 복원값과 일치, 2026-06-25)
-        } else if (freeReady){
-          puUsed[id]=true;                                          // ② 보유 0 일 때만 레벨해금 무료 1회분 소진
+        const price = puPriceFor(id);
+        if (price!=null){
+          try{
+            const m = _cbMeta();
+            if (m && window.CB && CB.addCoins && CB.saveMeta){
+              if ((m.wallet.coins|0) >= price){                   // arm 단계서 이미 게이트됨 — 방어적 재확인
+                CB.addCoins(m, -price); CB.saveMeta(m);
+                coinBalance = m.wallet.coins|0; META.coins=coinBalance; _coinDisplay(coinBalance);
+              }
+            } else if ((coinBalance|0) >= price){                 // CB 미인라인 폴백
+              coinBalance = Math.max(0, (coinBalance|0) - price); META.coins=coinBalance; _coinDisplay(coinBalance);
+            }
+          }catch(e){}
         }
       }
     }
@@ -12689,19 +12657,13 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     e.stopPropagation();
     if (el.classList.contains('disabled')) return;                   // 비활성 버튼 클릭 무시
     const id=el.dataset.id; if (!id) return;
-    // ── 단독/릴스(IS_SOLO) 구매형 모델 ─────────────────────────────────────────
-    //   보유분>0 → 사용(activatePowerup). 인벤 0 + 레벨해금 → 구매 팝업(item-buy-overlay) 열기(바로 구매-사용/토스트 X).
-    //   인벤 0 + 미해금(레벨미달) → 아무것도 안 함. (코인 부족 토스트는 제거 — 팝업이 대체)
-    if (IS_SOLO){
-      if (boosterInvForPu(id) > 0){ activatePowerup(id); return; }    // 보유분 사용(기존 동작)
-      const def=POWERUPS.find(x=>x.id===id);
-      const level=STAGES[stageIndex]?STAGES[stageIndex].id:1;
-      if (def && level>=puUnlockLevel(def)){ showItemBuy(def); }      // 해금됨 → 구매 팝업(미해금이면 무시)
-      return;
-    }
-    // ── 본게임(비-IS_SOLO): 기존 동작 유지(회귀 0) ───────────────────────────────
-    if (!puAvailable(id)){ if (puCantAfford(id)) showCoinToast(); return; }   // ★ 코인 부족이면 토스트(2026-06-26), 그 외(미해금)는 조용히 무시
-    activatePowerup(id);
+    // ── 통합 구매형 모델(2026-06-27, 본게임/릴스 동일) ─────────────────────────
+    //   보유분>0 → 사용(activatePowerup). 인벤 0 + 레벨해금 → 구매 팝업(item-buy-overlay) 열기.
+    //   인벤 0 + 미해금(레벨미달) → 아무것도 안 함.
+    if (boosterInvForPu(id) > 0){ activatePowerup(id); return; }      // 보유분 사용
+    const def=POWERUPS.find(x=>x.id===id);
+    const level=STAGES[stageIndex]?STAGES[stageIndex].id:1;
+    if (def && level>=puUnlockLevel(def)){ showItemBuy(def); }        // 해금됨 → 구매 팝업(미해금이면 무시)
   });
   elSlots.addEventListener('pointerdown', e=>{
     if (puMode!=='extra') return;
