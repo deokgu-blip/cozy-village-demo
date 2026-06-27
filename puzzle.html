@@ -4618,7 +4618,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   #make-overlay #make-coinpop { z-index:6; }
   #make-overlay #make-complete { z-index:7; }
   /* ===== 게임오버 'Continue?' 팝업 — 다른 팝업과 통일한 픽셀 프레임(딥블루 카드 + 픽셀 폰트) ===== */
-  #over-overlay { position:absolute; inset:0; z-index:72; display:none; align-items:center; justify-content:center; background:rgba(6,16,34,.62); }
+  /* #fit-root 직속(게임박스 밖)으로 이동 → 딤이 전체 뷰포트(레터박스 포함)를 덮음. position:fixed; inset:0 = #fit-root 기준(transform 컨테이닝 블록).
+     z:198 = #hud-top(z120)·게임박스·#pu-overlay(z195) 위로 올려 게임오버 딤이 HUD·아이템바까지 덮게(이동 전 박스내부 z72 였으나 #fit-root 직속이 되며 HUD z120 보다 낮으면 HUD 가 안 덮임). */
+  #over-overlay { position:fixed; inset:0; z-index:198; display:none; align-items:center; justify-content:center; background:rgba(6,16,34,.62); }
   #over-overlay.show { display:flex; }
   /* .pix-card 상속 — width/padding 만 override */
   #over-card { width:300px; max-width:84%; padding:26px 22px 24px; }
@@ -4776,33 +4778,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       <div id="oops-word">Oops!</div>
     </div>
 
-    <!-- 게임오버 'Out of Space' 팝업 — 좌측 3슬롯을 위로 튕겨 자리 확보 -->
-    <div id="over-overlay" aria-hidden="true">
-      <div id="over-card" class="pix-card">
-        <button id="over-close" class="pix-close" aria-label="Close"></button>
-        <div id="over-title" class="pix-title">Out of Space</div>
-        <!-- 일러스트: 실제 문어 3-스프링 배치(자산 있으면 이미지, 없으면 아래 도식 폴백) -->
-        <div id="over-diagram">
-          <img id="over-diagram-img" alt="" aria-hidden="true" />
-          <div id="over-diagram-schematic">
-            <div class="od-row od-top">
-              <div class="od-cell octo"></div><div class="od-cell octo"></div><div class="od-cell octo"></div>
-            </div>
-            <div class="od-arrow">▲</div>
-            <div class="od-row od-bottom">
-              <div class="od-cell"></div><div class="od-cell"></div><div class="od-cell"></div><div class="od-cell octo"></div><div class="od-cell octo"></div>
-            </div>
-          </div>
-        </div>
-        <div id="over-desc"></div>
-        <!-- 하나의 둥근 버튼, 두 영역을 '색'으로만 구분(가운데 분리선 없음): 좌=효과(스프링×3) | 우=비용(코인920) -->
-        <button id="over-continue" class="pix-btn">
-          <span id="over-spring-row" class="over-half"><span class="over-spring-icon"></span><span id="over-spring-x">×3</span></span>
-          <span id="over-cost-row" class="over-half"><span class="over-coin"></span><span id="over-cost">900</span></span>
-        </button>
-        <button id="over-retry" class="pix-btn"><span class="over-retry-ico">↻</span>Retry</button>
-      </div>
-    </div>
+    <!-- #over-overlay(게임오버 'Out of Space' 팝업) 은 #fit-root 직속(게임박스 밖)으로 이동 → 딤이 전체뷰포트 커버 (아래 참조) -->
 
     <!-- 코인 부족 토스트(작게, 아트톤) -->
     <div id="coin-toast"><span class="ct-coin"></span><span class="ct-msg">Not enough coins</span></div>
@@ -4810,31 +4786,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     <!-- HARD LEVEL! 배너(진입 시 1회, 비차단) -->
     <div id="hard-banner"><span class="hb-skull">💀</span><span class="hb-txt">HARD LEVEL!</span></div>
 
-    <!-- 아이템 해금 팝업(첫 진입 1회, 무료 1개 지급 안내) -->
-    <div id="item-unlock-overlay">
-      <div class="iu-card pix-card">
-        <div class="iu-new">NEW ITEM!</div>
-        <div class="iu-icon-wrap"><div class="iu-glow"></div><img class="iu-icon" alt=""></div>
-        <div class="iu-name"></div>
-        <div class="iu-desc"></div>
-        <div class="iu-free"><span class="iu-gift"></span><span class="iu-free-txt">1 free!</span></div>
-        <button class="iu-btn pix-btn">Got it!</button>
-      </div>
-    </div>
-
-    <!-- 아이템 구매 팝업(단독/릴스 IS_SOLO 전용 — 빈 아이템 탭 시: 인벤 0 + 레벨해금이면 여기서 구매) -->
-    <!--   item-unlock 팝업과 동일 아트톤(.iu-card 네이비 + .iu-* 클래스 재사용). 가격행 + Buy/Cancel. -->
-    <div id="item-buy-overlay">
-      <div class="iu-card ib-card pix-card">
-        <button class="ib-x pix-close" aria-label="Close">×</button>
-        <div class="iu-icon-wrap"><div class="iu-glow"></div><img class="iu-icon ib-icon" alt=""></div>
-        <div class="iu-name ib-name"></div>
-        <div class="iu-desc ib-desc"></div>
-        <div class="ib-actions">
-          <button class="ib-buy pix-btn"><i class="ib-buy-coin"></i><span class="ib-buy-val"></span></button>
-        </div>
-      </div>
-    </div>
+    <!-- #item-unlock-overlay / #item-buy-overlay 는 #fit-root 직속(게임박스 밖)으로 이동 → 딤이 전체뷰포트 커버 (아래 참조). transform 걸린 #game-container 안에선 position:fixed 도 박스 기준이라 딤이 잘림(B.5). -->
 
     <!-- 디오라마 제작 화면(클리어 직후) -->
     <div id="make-overlay">
@@ -4877,6 +4829,64 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     <div id="pu-cannon-mascot"></div>
     <!-- 청소기 사용 이미지(vacuum 모드 전용): 화면 하단-중앙 슬라이드인, 노즐 입구=상단 -->
     <div id="pu-vacuum-img" aria-hidden="true"></div>
+  </div>
+
+  <!-- ===== 딤 오버레이들(게임오버/아이템 해금/구매): #fit-root 직속(게임박스 밖)으로 이동.
+       transform 걸린 #game-container 안에 두면 position:fixed/absolute 도 박스 기준이라 딤이 레터박스(상하 여백)·HUD·아이템바를 못 덮음(B.5).
+       핸들러는 ID 로 부착되어 DOM 이동해도 안전. ===== -->
+
+  <!-- 게임오버 'Out of Space' 팝업 — 좌측 3슬롯을 위로 튕겨 자리 확보 -->
+  <div id="over-overlay" aria-hidden="true">
+    <div id="over-card" class="pix-card">
+      <button id="over-close" class="pix-close" aria-label="Close"></button>
+      <div id="over-title" class="pix-title">Out of Space</div>
+      <!-- 일러스트: 실제 문어 3-스프링 배치(자산 있으면 이미지, 없으면 아래 도식 폴백) -->
+      <div id="over-diagram">
+        <img id="over-diagram-img" alt="" aria-hidden="true" />
+        <div id="over-diagram-schematic">
+          <div class="od-row od-top">
+            <div class="od-cell octo"></div><div class="od-cell octo"></div><div class="od-cell octo"></div>
+          </div>
+          <div class="od-arrow">▲</div>
+          <div class="od-row od-bottom">
+            <div class="od-cell"></div><div class="od-cell"></div><div class="od-cell"></div><div class="od-cell octo"></div><div class="od-cell octo"></div>
+          </div>
+        </div>
+      </div>
+      <div id="over-desc"></div>
+      <!-- 하나의 둥근 버튼, 두 영역을 '색'으로만 구분(가운데 분리선 없음): 좌=효과(스프링×3) | 우=비용(코인920) -->
+      <button id="over-continue" class="pix-btn">
+        <span id="over-spring-row" class="over-half"><span class="over-spring-icon"></span><span id="over-spring-x">×3</span></span>
+        <span id="over-cost-row" class="over-half"><span class="over-coin"></span><span id="over-cost">900</span></span>
+      </button>
+      <button id="over-retry" class="pix-btn"><span class="over-retry-ico">↻</span>Retry</button>
+    </div>
+  </div>
+
+  <!-- 아이템 해금 팝업(첫 진입 1회, 무료 1개 지급 안내) -->
+  <div id="item-unlock-overlay">
+    <div class="iu-card pix-card">
+      <div class="iu-new">NEW ITEM!</div>
+      <div class="iu-icon-wrap"><div class="iu-glow"></div><img class="iu-icon" alt=""></div>
+      <div class="iu-name"></div>
+      <div class="iu-desc"></div>
+      <div class="iu-free"><span class="iu-gift"></span><span class="iu-free-txt">1 free!</span></div>
+      <button class="iu-btn pix-btn">Got it!</button>
+    </div>
+  </div>
+
+  <!-- 아이템 구매 팝업(단독/릴스 IS_SOLO 전용 — 빈 아이템 탭 시: 인벤 0 + 레벨해금이면 여기서 구매) -->
+  <!--   item-unlock 팝업과 동일 아트톤(.iu-card 네이비 + .iu-* 클래스 재사용). 가격행 + Buy/Cancel. -->
+  <div id="item-buy-overlay">
+    <div class="iu-card ib-card pix-card">
+      <button class="ib-x pix-close" aria-label="Close">×</button>
+      <div class="iu-icon-wrap"><div class="iu-glow"></div><img class="iu-icon ib-icon" alt=""></div>
+      <div class="iu-name ib-name"></div>
+      <div class="iu-desc ib-desc"></div>
+      <div class="ib-actions">
+        <button class="ib-buy pix-btn"><i class="ib-buy-coin"></i><span class="ib-buy-val"></span></button>
+      </div>
+    </div>
   </div>
 
   <!-- ===== 뷰포트 기준(게임박스 밖) UI: #fit-root 직속 → 화면 끝/전체뷰포트 기준. 게임플레이 요소는 박스 안에 유지. ===== -->
