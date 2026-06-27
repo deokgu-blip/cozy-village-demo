@@ -7531,7 +7531,8 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   //   CB.boosterPrice 가 null 이면 이 값으로 → 보유분(무료/구매) 소진 후엔 사용마다 코인 차감.
   // ★ 릴스(IS_SOLO) 전용 재화밸런스(2026-06-27 사용자: 릴스빌드 재화 재조정). 릴스는 이 표가 단일 출처(공용 balance.js 무시) → 여기서 자유 튜닝.
   //   아이템 가격 전반 인하 + 대포(rainbow) 80 으로 특히 인하(효율 보정). 본게임(로비)은 기존 CB.boosterPrice 유지.
-  const REELS_PRICE = { magnet:60, wand:60, extra:90, rainbow:80, vacuum:140 };
+  // 가격은 기존 고정가 유지 + 대포(rainbow)만 인하(90) (2026-06-27 사용자: 가격은 기존처럼, 대포만 싸게). 보상만 점진형으로.
+  const REELS_PRICE = { magnet:100, wand:100, extra:200, rainbow:90, vacuum:300 };
   const PU_PRICE = { magnet:150, wand:200, extra:250, rainbow:300, vacuum:350 };   // 폴백(비-IS_SOLO·CB가격 없을 때)
   function puPriceFor(puId){
     if (IS_SOLO){ return (REELS_PRICE[puId]!=null) ? REELS_PRICE[puId] : null; }   // 릴스: 전용 표(공용 balance 무시)
@@ -7541,10 +7542,14 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     if (p==null) p = (PU_PRICE[puId]!=null) ? PU_PRICE[puId] : null;
     return p;
   }
-  // ★ 릴스(IS_SOLO) 스테이지 클리어 코인 보상(2026-06-27 사용자: 스테이지당 벌이가 너무 적음 → 상향). 일반 60 / HARD 120. (이전 고정 20)
+  // ★ 릴스(IS_SOLO) 스테이지 클리어 코인 보상(2026-06-27 사용자: 진행할수록 점점 ↑ + HARD 더 많이. 가격 고정이라 보상은 점진).
+  //   진행 램프: 1판 25 → 105판 ~77. HARD 는 1.8배. (이전 60/HARD120 고정 → 너무 후해서 점진형 교체)
   function soloClearReward(){
+    const sid = (STAGES[stageIndex] ? STAGES[stageIndex].id : (stageIndex+1)) | 0;
     const hard = !!(STAGES[stageIndex] && STAGES[stageIndex].hard);
-    return hard ? 120 : 60;
+    let r = 25 + Math.floor((sid-1) * 0.5);
+    if (hard) r = Math.round(r * 1.8);
+    return r;
   }
   // ★ 이 파워업이 '코인 부족' 때문에 못 쓰는 상태인가(미해금/없음과 구분) → 부족 토스트 트리거용. (2026-06-26)
   function puCantAfford(puId){
