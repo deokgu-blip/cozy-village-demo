@@ -4485,6 +4485,39 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   .iu-free .iu-gift::after{ content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); width:100%; height:4px; background:#e0432f; }
   .iu-btn{ width:200px; max-width:100%; margin:0 auto; padding:13px 16px; font-size:21px; letter-spacing:.5px; }
 
+  /* ── ITEM BUY 팝업(단독/릴스 전용): item-unlock 과 동일 .iu-card 네이비 아트톤 + 가격행 + Buy/Cancel. ── */
+  #item-buy-overlay{ position:fixed; inset:0; z-index:206; display:none; align-items:center; justify-content:center;
+    background:rgba(6,12,24,0.62); }
+  #item-buy-overlay.show{ display:flex; }
+  .ib-card{ width:282px; max-width:84%; padding:22px 22px 20px; }
+  #item-buy-overlay.show .iu-card{ opacity:1; transform:scale(1); }   /* show 시 등장 트랜지션(.iu-card 상속) */
+  .ib-card .iu-icon-wrap{ margin-top:2px; }
+  .ib-x{ top:-15px; right:-13px; font-size:0; }
+  /* 가격행: 코인 아이콘 + 금액(골드 톤, item-unlock '1 free' 행과 같은 위치감) */
+  .ib-price{ display:flex; align-items:center; justify-content:center; gap:7px; margin:2px 0 17px;
+    font-family:'TitanOne','PixelifySans','BlackHanSans','Jua',sans-serif; font-size:22px; color:#ffe08a; letter-spacing:.4px;
+    text-shadow:0 2px 0 #0b1d3e, 0 3px 4px rgba(0,0,0,.3); }
+  .ib-price .ib-price-coin{ width:23px; height:23px; flex:0 0 auto; border-radius:50%;
+    background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%,#ffe79a,#f5a623))) center/contain no-repeat;
+    filter:drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+  /* 액션행: Cancel(중립) + Buy(초록 .pix-btn) 가로 2열 */
+  .ib-actions{ display:flex; gap:11px; }
+  .ib-actions .pix-btn{ flex:1 1 0; padding:13px 8px; font-size:19px; letter-spacing:.4px;
+    display:flex; align-items:center; justify-content:center; gap:6px; }
+  /* Cancel = 중립 회청 버튼(.pix-btn 입체 유지, 초록 대신 슬레이트) */
+  .ib-cancel{ background:linear-gradient(180deg,#6f86ab 0%,#4f688c 100%); border-color:#374f70;
+    box-shadow:0 6px 0 #2c3f5c, 0 9px 14px rgba(0,0,0,.32), inset 0 3px 0 rgba(255,255,255,.32);
+    text-shadow:0 2px 0 rgba(20,34,58,.6); }
+  .ib-cancel:active{ box-shadow:0 2px 0 #2c3f5c, 0 4px 8px rgba(0,0,0,.3), inset 0 3px 0 rgba(255,255,255,.3); }
+  .ib-buy .ib-buy-coin{ width:18px; height:18px; flex:0 0 auto; border-radius:50%;
+    background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%,#ffe79a,#f5a623))) center/contain no-repeat;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3)); }
+  /* Buy 비활성(코인 부족): 회색 + cursor not-allowed + 클릭 무반응 */
+  .ib-buy.disabled{ background:linear-gradient(180deg,#8b95a3 0%,#697482 100%); border-color:#535d6b;
+    box-shadow:0 6px 0 #444c58, 0 9px 14px rgba(0,0,0,.28), inset 0 3px 0 rgba(255,255,255,.22);
+    color:#dfe4ea; cursor:not-allowed; filter:saturate(.5); text-shadow:0 1px 0 rgba(40,46,56,.5); }
+  .ib-buy.disabled:active{ transform:none; box-shadow:0 6px 0 #444c58, 0 9px 14px rgba(0,0,0,.28), inset 0 3px 0 rgba(255,255,255,.22); }
+
   #combo-text {
     display:none;   /* 콤보 텍스트 출력 제거(사용자 요청) */
   }
@@ -4785,6 +4818,22 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
         <div class="iu-desc"></div>
         <div class="iu-free"><span class="iu-gift"></span><span class="iu-free-txt">1 free!</span></div>
         <button class="iu-btn pix-btn">Got it!</button>
+      </div>
+    </div>
+
+    <!-- 아이템 구매 팝업(단독/릴스 IS_SOLO 전용 — 빈 아이템 탭 시: 인벤 0 + 레벨해금이면 여기서 구매) -->
+    <!--   item-unlock 팝업과 동일 아트톤(.iu-card 네이비 + .iu-* 클래스 재사용). 가격행 + Buy/Cancel. -->
+    <div id="item-buy-overlay">
+      <div class="iu-card ib-card pix-card">
+        <button class="ib-x pix-close" aria-label="Close">×</button>
+        <div class="iu-icon-wrap"><div class="iu-glow"></div><img class="iu-icon ib-icon" alt=""></div>
+        <div class="iu-name ib-name"></div>
+        <div class="iu-desc ib-desc"></div>
+        <div class="ib-price"><i class="ib-price-coin"></i><span class="ib-price-val"></span></div>
+        <div class="ib-actions">
+          <button class="ib-cancel pix-btn">Cancel</button>
+          <button class="ib-buy pix-btn"><i class="ib-buy-coin"></i><span class="ib-buy-val"></span></button>
+        </div>
       </div>
     </div>
 
@@ -7530,9 +7579,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   // ★ 폴백 코인 가격(2026-06-26 사용자: 아이템 써도 코인 안 줄던 버그 — 공용 balance 에 가격이 없으면 차감이 통째로 스킵됐음).
   //   CB.boosterPrice 가 null 이면 이 값으로 → 보유분(무료/구매) 소진 후엔 사용마다 코인 차감.
   // ★ 릴스(IS_SOLO) 전용 재화밸런스(2026-06-27 사용자: 릴스빌드 재화 재조정). 릴스는 이 표가 단일 출처(공용 balance.js 무시) → 여기서 자유 튜닝.
-  //   아이템 가격 전반 인하 + 대포(rainbow) 80 으로 특히 인하(효율 보정). 본게임(로비)은 기존 CB.boosterPrice 유지.
-  // 가격은 기존 고정가 유지 + 대포(rainbow)만 인하(90) (2026-06-27 사용자: 가격은 기존처럼, 대포만 싸게). 보상만 점진형으로.
-  const REELS_PRICE = { magnet:100, wand:100, extra:200, rainbow:90, vacuum:300 };
+  //   본게임(로비)은 기존 CB.boosterPrice 유지.
+  // ★ 릴스 아이템 가격: 기존 고정가 + 대포(rainbow)만 100 고정 (2026-06-27 사용자: 기존 밸런싱 원복, 대포만 100).
+  const REELS_PRICE = { magnet:100, wand:100, extra:200, rainbow:100, vacuum:300 };
   const PU_PRICE = { magnet:150, wand:200, extra:250, rainbow:300, vacuum:350 };   // 폴백(비-IS_SOLO·CB가격 없을 때)
   function puPriceFor(puId){
     if (IS_SOLO){ return (REELS_PRICE[puId]!=null) ? REELS_PRICE[puId] : null; }   // 릴스: 전용 표(공용 balance 무시)
@@ -7542,14 +7591,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     if (p==null) p = (PU_PRICE[puId]!=null) ? PU_PRICE[puId] : null;
     return p;
   }
-  // ★ 릴스(IS_SOLO) 스테이지 클리어 코인 보상(2026-06-27 사용자: 진행할수록 점점 ↑ + HARD 더 많이. 가격 고정이라 보상은 점진).
-  //   진행 램프: 1판 25 → 105판 ~77. HARD 는 1.8배. (이전 60/HARD120 고정 → 너무 후해서 점진형 교체)
+  // ★ 릴스(IS_SOLO) 스테이지 클리어 코인 보상: 기존 고정 +20 (2026-06-27 사용자: 아이템 안 써도 되는 판 많아 점진형 취소·원복).
   function soloClearReward(){
-    const sid = (STAGES[stageIndex] ? STAGES[stageIndex].id : (stageIndex+1)) | 0;
-    const hard = !!(STAGES[stageIndex] && STAGES[stageIndex].hard);
-    let r = 25 + Math.floor((sid-1) * 0.5);
-    if (hard) r = Math.round(r * 1.8);
-    return r;
+    return 20;
   }
   // ★ 이 파워업이 '코인 부족' 때문에 못 쓰는 상태인가(미해금/없음과 구분) → 부족 토스트 트리거용. (2026-06-26)
   function puCantAfford(puId){
@@ -7635,6 +7679,83 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     const btn=ov.querySelector('.iu-btn');
     if (btn) btn.addEventListener('click', ()=>{ try{ playSfx('sfx_tap'); }catch(e){} hideItemUnlock(); });
   })();
+
+  // ═══ ITEM BUY 팝업(단독/릴스 IS_SOLO 전용, 2026-06-27) ════════════════════════
+  //   빈 아이템(인벤 0) + 레벨해금 상태에서 아이템을 탭하면 '바로 구매-사용'/토스트 대신 이 팝업을 연다.
+  //   구성(item-unlock 과 동일 .iu-card 네이비 아트톤): 아이콘 + 이름 + 설명 + 가격행(코인+가격) + Buy/Cancel.
+  //   Buy: 코인 충분 → 코인 차감 + 인벤 +1(메타 SSOT) + 화면/HUD 갱신 + sendGameState + renderPowerups + 닫기.
+  //        코인 부족 → Buy 버튼 회색·not-allowed(클릭 무반응, 토스트 없음).
+  //   Cancel/딤(배경) 탭 → 변경 없이 닫기.
+  let _ibPuId=null;   // 현재 팝업이 다루는 파워업 id
+  function showItemBuy(p){
+    const ov=document.getElementById('item-buy-overlay'); if(!ov||!p) return;
+    _ibPuId=p.id;
+    const info=ITEM_INFO[p.id] || { name:p.id, desc:'' };
+    const price=puPriceFor(p.id);
+    const img=ov.querySelector('.ib-icon');
+    const src=(loadedImages[p.slot] && loadedImages[p.slot].src) ? loadedImages[p.slot].src : null;
+    if (img){ if(src){ img.src=src; img.style.display=''; } else { img.style.display='none'; } }
+    const nm=ov.querySelector('.ib-name'); if(nm) nm.textContent=info.name;
+    const ds=ov.querySelector('.ib-desc'); if(ds) ds.textContent=info.desc;
+    const pv=ov.querySelector('.ib-price-val'); if(pv) pv.textContent=(price!=null?price:'');
+    const bv=ov.querySelector('.ib-buy-val'); if(bv) bv.textContent=(price!=null?price:'Buy');
+    _ibRefreshBuyState();
+    ov.classList.add('show'); try{ haptic('light'); }catch(e){}
+    try{ playSfx('sfx_tap'); }catch(e){}
+  }
+  function hideItemBuy(){
+    const ov=document.getElementById('item-buy-overlay'); if(ov) ov.classList.remove('show');
+    _ibPuId=null;
+  }
+  // 코인 잔액 대비 Buy 가능 여부로 Buy 버튼의 .disabled(회색·not-allowed)를 갱신.
+  function _ibRefreshBuyState(){
+    const ov=document.getElementById('item-buy-overlay'); if(!ov||!_ibPuId) return;
+    const buy=ov.querySelector('.ib-buy'); if(!buy) return;
+    const price=puPriceFor(_ibPuId);
+    const afford=(price!=null) && ((coinBalance|0) >= price);
+    buy.classList.toggle('disabled', !afford);
+  }
+  // 구매 실행: 코인 충분이면 코인 차감 + 인벤 +1(메타 SSOT) + 갱신 + 저장 + 닫기. 부족이면 no-op(토스트 없음).
+  function doItemBuy(){
+    if(!_ibPuId) return;
+    const id=_ibPuId;
+    const price=puPriceFor(id);
+    if (price==null) return;
+    if ((coinBalance|0) < price){ _ibRefreshBuyState(); return; }   // 방어적 — 회색 상태면 무반응
+    const bid=PU_BOOSTER[id]; if(!bid) return;
+    try{
+      const m=_cbMeta();
+      if (m && window.CB && CB.addCoins && CB.addBooster && CB.saveMeta){
+        CB.addCoins(m, -price);
+        CB.addBooster(m, bid, 1);
+        CB.saveMeta(m);
+        coinBalance = m.wallet.coins|0; META.coins=coinBalance;
+        if(typeof _coinDisplay==='function') _coinDisplay(coinBalance);
+      } else {
+        // CB 미인라인 폴백(단독 무메타): 코인만 로컬 차감(인벤은 메타 없으면 무의미).
+        coinBalance = Math.max(0, (coinBalance|0) - price); META.coins=coinBalance;
+        if(typeof _coinDisplay==='function') _coinDisplay(coinBalance);
+      }
+    }catch(e){}
+    try{ haptic('medium'); }catch(e){}
+    try{ playSfx('sfx_reward'); }catch(e){}
+    try{ sendGameState(); }catch(e){}   // 앱 저장(코인·아이템 변동) — __GR.active(단독/릴스)일 때만 발신
+    try{ renderPowerups(); }catch(e){}   // 버튼이 새 보유수(배지=1) 표시
+    hideItemBuy();
+  }
+  // 바인딩(1회): Buy / Cancel / X / 딤(배경) 탭.
+  (function bindItemBuy(){
+    const ov=document.getElementById('item-buy-overlay'); if(!ov) return;
+    const buy=ov.querySelector('.ib-buy');
+    const cancel=ov.querySelector('.ib-cancel');
+    const x=ov.querySelector('.ib-x');
+    if (buy) buy.addEventListener('click', (e)=>{ e.stopPropagation(); if(buy.classList.contains('disabled')) return; doItemBuy(); });
+    if (cancel) cancel.addEventListener('click', (e)=>{ e.stopPropagation(); try{ playSfx('sfx_tap'); }catch(e){} hideItemBuy(); });
+    if (x) x.addEventListener('click', (e)=>{ e.stopPropagation(); try{ playSfx('sfx_tap'); }catch(e){} hideItemBuy(); });
+    ov.addEventListener('pointerdown', (e)=>{ if(e.target===ov){ hideItemBuy(); } });   // 딤(배경) 탭 → 닫기
+    try{ window.__showItemBuy=(id)=>{ const p=POWERUPS.find(x=>x.id===id); if(p) showItemBuy(p); return !!p; }; window.__doItemBuy=doItemBuy; window.__hideItemBuy=hideItemBuy; }catch(e){}   // 헤드리스 검증 훅
+  })();
+
   // loadStage 훅: 해금 첫 진입이면 무료지급+팝업, 아니면 HARD 배너(둘 다 해당 시 팝업 우선 — 인터랙티브).
   function onStageEntered(){
     if (_demoStage) return;            // 데모는 제외
@@ -12570,6 +12691,17 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     e.stopPropagation();
     if (el.classList.contains('disabled')) return;                   // 비활성 버튼 클릭 무시
     const id=el.dataset.id; if (!id) return;
+    // ── 단독/릴스(IS_SOLO) 구매형 모델 ─────────────────────────────────────────
+    //   보유분>0 → 사용(activatePowerup). 인벤 0 + 레벨해금 → 구매 팝업(item-buy-overlay) 열기(바로 구매-사용/토스트 X).
+    //   인벤 0 + 미해금(레벨미달) → 아무것도 안 함. (코인 부족 토스트는 제거 — 팝업이 대체)
+    if (IS_SOLO){
+      if (boosterInvForPu(id) > 0){ activatePowerup(id); return; }    // 보유분 사용(기존 동작)
+      const def=POWERUPS.find(x=>x.id===id);
+      const level=STAGES[stageIndex]?STAGES[stageIndex].id:1;
+      if (def && level>=puUnlockLevel(def)){ showItemBuy(def); }      // 해금됨 → 구매 팝업(미해금이면 무시)
+      return;
+    }
+    // ── 본게임(비-IS_SOLO): 기존 동작 유지(회귀 0) ───────────────────────────────
     if (!puAvailable(id)){ if (puCantAfford(id)) showCoinToast(); return; }   // ★ 코인 부족이면 토스트(2026-06-26), 그 외(미해금)는 조용히 무시
     activatePowerup(id);
   });
