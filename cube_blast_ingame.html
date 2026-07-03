@@ -7378,7 +7378,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   //   (기존 릴스 30배수/구간끝 게이트 제거 — 규격의 "클리어마다"와 충돌해서. 호스트는 progressIndex/
   //    구간끝(level>=to)으로 마무리 CTA를 구분한다.)
   function shouldEmitGameEnd(level){
-    return true;                                // 매 클리어(성공/실패) GameEnd 전송
+    return true;   // ★확정 정책(사용자 2026-07-03): 매 스테이지 클리어/실패마다 GameEnd. 30배수 게이트 금지.
   }
   try{ window.__RT = RT; window.__shouldEmitGameEnd = shouldEmitGameEnd; }catch(e){}   // 호스트/QA 디버그: 릴스 설정·신호정책 조회(읽기전용)
 
@@ -7544,7 +7544,9 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
 
   function syncMeta(){
     const payload={ type:'cubeblast:meta', di:META.di, filled:META.filled, coins:META.coins, ms:META.ms, level:META.level||1 };
-    try{ if(window.parent && window.parent!==window) window.parent.postMessage(payload,'*'); }catch(e){}
+    // ★/simo 규약 정리(2026-07-03): 'cubeblast:meta'는 로비(iframe 부모) 전용 구형 프로토콜 —
+    //   릴스/호스트(GR active) 빌드에선 발신 금지(호스트가 규약 외 이벤트를 받지 않게). 로비 컨텍스트에서만 유지.
+    try{ if(!(window.__GR && window.__GR.active) && window.parent && window.parent!==window) window.parent.postMessage(payload,'*'); }catch(e){}
     // 진행도 직접 저장: 게임 iframe 과 로비는 동일 오리진 → 같은 localStorage 공유. 부모 리스너 타이밍/단독실행과 무관하게 보존(로비 LS 키 'cb_meta' 와 동일).
     try{ localStorage.setItem('cb_meta', JSON.stringify({di:META.di, filled:META.filled, coins:META.coins, ms:META.ms, level:META.level||1})); }catch(e){}
     try{ if(window.AndroidApp && window.AndroidApp.saveMeta) window.AndroidApp.saveMeta(JSON.stringify(payload)); }catch(e){}
@@ -10011,7 +10013,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
     playSfx('sfx_win');   // 결과창("Well Done") 등장음 — 부드러운 클리어 사운드
     _confettiRAFLoop();
     // gamereels: 클리어 연출(타이틀/컨페티)이 뜬 뒤 성공 신호 — 연출 다 끝난 시점에 호스트가 CTA 띄울 수 있게 지연 emit.
-    try{ if (GR.active){ var _grPi=stageIndex+1; if (shouldEmitGameEnd(_grPi)) setTimeout(function(){ GR.gameEnd(true, _grPi); }, 700); } }catch(e){}   // 클리어 성공 신호: reels 면 30배수/구간끝(to)에서만, 그 외 매 클리어. progressIndex/currentIndex=현재 레벨
+    try{ if (GR.active){ var _grPi=stageIndex+1; if (shouldEmitGameEnd(_grPi)) setTimeout(function(){ GR.gameEnd(true, _grPi); }, 700); } }catch(e){}   // 클리어 성공 신호: ★모든 모드 '매 클리어' 전송(사용자 확정 2026-07-03 — 30배수 게이트는 잘못된 방식). progressIndex=방금 클리어한 스테이지 번호(1-based)
     try{ sendGameState(); }catch(e){}   // ⒜ 스테이지 클리어 → 진행상황(클리어수·코인·아이템) 발신(메타 적립 후 시점)
     flushMilestoneToasts();   // Wave2-A: 이번 클리어로 넘은 디오라마 마일스톤 보상 팝업(있으면 순차)
     // 중복 방지: 이전 클리어에서 남은 핸들러 제거 + once 가드(탭/합성 이벤트 중복 발화 차단)
@@ -12859,7 +12861,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       if (window.Lobby && window.Lobby.goHome){ window.Lobby.goHome(); return; }
       if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.lobby){ window.webkit.messageHandlers.lobby.postMessage('home'); return; }
       if (window.AndroidApp && window.AndroidApp.goHome){ window.AndroidApp.goHome(); return; }
-      if (window.parent && window.parent!==window){ window.parent.postMessage({type:'cubeblast:home'},'*'); return; }   // 혹시 iframe 으로 열렸을 때 호환
+      if (!(window.__GR && window.__GR.active) && window.parent && window.parent!==window){ window.parent.postMessage({type:'cubeblast:home'},'*'); return; }   // 로비 iframe 호환(구형) — ★호스트(GR) 빌드에선 발신 금지(/simo 규약 외 이벤트 차단 2026-07-03)
     }catch(e){}
     // 전체 페이지 전환: 로비로 이동 → 플레이 중엔 로비가 완전히 언로드되어 GPU 경쟁 0(voxel-drop과 동일)
     //   ?lobby=1 = "인게임에서 의도적으로 로비를 봤다" (로비가 자동 포워드 안 함, 새로고침 후에도 sessionStorage 와 이중 안전).
