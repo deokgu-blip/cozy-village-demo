@@ -5081,7 +5081,7 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
   function haptic(level, core){
     if (!HAPTIC.enabled) return;
     if (!core) return;   // ★ 햅틱은 '복셀 깨짐(removeVoxel)'·'문어 배치(sfx_place)' 두 코어 이벤트만 재생(사용자 지침 2026-06-22). 그 외 호출은 무음.
-    try{ var _gr=window.__GR; if (_gr && _gr.active) _gr.vibrate(level); }catch(e){}   // gamereels: 진동을 호스트에 위임(Soft/Light/MediumVibrate). ★ GR 은 다른 <script> 블록 const 라 이 스코프에서 직접 참조 불가 → window.__GR 로 브리지(2026-06-23 버그수정). 아래 네이티브/웹 폴백은 비-호스트용 유지.
+    try{ var _gr=window.__GR; if (_gr && _gr.active){ _gr.vibrate(level); return; } }catch(e){}   // gamereels: 진동은 '호스트에 위임만'(Soft/Light/MediumVibrate 신호) — /simo 규약상 호스트 컨텍스트에선 navigator.vibrate 등 로컬 폴백 금지(return). 비-호스트(APK/웹)만 아래 폴백.
     const gap = HAPTIC.GAP[level] || 0;
     if (gap){
       const t = (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
@@ -7421,7 +7421,12 @@ body,button,input,select,textarea{font-family:'TitanOne','Jua','Apple SD Gothic 
       [300,800,1600,3000,5000].forEach(function(ms){ try{ setTimeout(_emitStart, ms); }catch(e){} });
     }
     // 호스트 규격: GameEnd 의 data = 객체 { success:bool, progressIndex:int }. (success=클리어 여부, progressIndex=1-based 스테이지 번호 — 호출부에서 stageIndex+1 로 전달)
-    function gameEnd(success, level){ emit('GameEnd', { success: !!success, progressIndex: level|0, currentIndex: level|0 }); }   // 호스트 규격: success + progressIndex/currentIndex(=현재 레벨, 1-based) 동봉
+    // ★/simo 규약(13-feature-layers §A '계약 확장 규칙') 그대로: 신형(구조화 객체) 먼저 → 레거시 문자열("success"|"fail") 나중.
+    //   레거시를 버리지 않고 병행 emit(additive), 순서까지 계약(소비자가 마지막 값을 읽어도 안전하도록 문자열이 뒤).
+    function gameEnd(success, level){
+      emit('GameEnd', { success: !!success, progressIndex: level|0, currentIndex: level|0 });   // ① 구조화: progressIndex=1-based 현재 레벨
+      emit('GameEnd', success ? 'success' : 'fail');                                            // ② 레거시 문자열(스킬 규약 병행 유지)
+    }
     var VMAP={ soft:'SoftVibrate', selection:'SoftVibrate', light:'LightVibrate', medium:'MediumVibrate', heavy:'MediumVibrate' };
     function vibrate(level){ emit(VMAP[level]||'LightVibrate'); }
     function setPaused(p){
