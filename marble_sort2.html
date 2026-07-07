@@ -1,0 +1,800 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<title>Marble Sort2</title>
+<style>html,body{margin:0;height:100%;background:#5573B8;overflow:hidden;touch-action:none}canvas{display:block}</style>
+</head><body><canvas id="c"></canvas><script>
+// ═══════════════════════════════════════════════════════════════════════
+//  Marble Sort2 — 완전 신규 구현 (2026-07-07 시작)
+//  · 레퍼런스 영상의 메커닉/구성만 클론 — 코드·아트 전부 자체 제작(재사용 0)
+//  · 자체 미니 물리(버렛 원 + 세그먼트 벽 + 컨베이어 소켓), 캔버스 절차 아트
+// ═══════════════════════════════════════════════════════════════════════
+'use strict';
+
+// ── 디자인 좌표계(신규: 720×1560) ─────────────────────────────────────
+const DW = 720, DH = 1560;
+const BALL_R = 17;                       // 공 반지름
+const BALL_D = BALL_R * 2;
+
+// ── 팔레트(레퍼런스 육안 톤을 자체 스타일로 재해석) ────────────────────
+const PAL = {
+  bg: '#5573B8', wall: '#3D5288', zoneTop: '#9FB2BE', zoneBot: '#C5CEE0',
+  seat: '#DFE6F4', hudPill: '#9B7BD8', hudPillDark: '#7E5EC0', coinGold: '#FFC63A',
+  lockSlot: '#ABB6AE', lockSlotDark: '#8D9990',
+  railBody: '#6F7683', railSocket: '#565C66', railSlit: '#F2F4F8',
+  colors: { green: '#34C04A', blue: '#2E64E9', orange: '#FF9718', yellow: '#FFD53E', red: '#F0384E', purple: '#8B46E0' },
+  colorsDark: { green: '#1E8F32', blue: '#1B44B0', orange: '#C86B05', yellow: '#D9A81B', red: '#B01F33', purple: '#5F27A5' },
+  colorsLight: { green: '#7FE392', blue: '#7FA4F5', orange: '#FFC470', yellow: '#FFEA96', red: '#F98CA0', purple: '#BE93F0' },
+};
+const COLOR_KEYS = Object.keys(PAL.colors);
+
+// ── 레이아웃 ──────────────────────────────────────────────────────────
+const LO = {
+  hudY: 88, boosterY: 208,
+  zoneTopY: 300, zoneBotY: 1210,          // 보드 존 상/하(깔때기 목 전)
+  boardCell: 92, boardTopY: 430,
+  funnelTipY: 1245, mouthHalf: 46,        // 깔때기 목
+  railTop: 1330, railBot: 1372, railL: 128, railR: 592,
+  trayTopY: 1445, trayW: 128, trayBandH: 60, trayCapH: 84,
+};
+
+// ── 유틸 ─────────────────────────────────────────────────────────────
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (t) => t * t * (3 - 2 * t);
+const TAU = Math.PI * 2;
+function rr(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function shade(hex, f) {   // f>0 밝게, f<0 어둡게
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  const m = (c) => clamp(Math.round(f > 0 ? c + (255 - c) * f : c * (1 + f)), 0, 255);
+  return `rgb(${m(r)},${m(g)},${m(b)})`;
+}
+
+// ── 절차 아트(전부 자체 드로잉 — 로드시 1회 오프스크린 베이크) ─────────
+const ART = {};
+function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+// 팝잇 타일(3×3 알 돔) — 자체 스타일: 통통한 라운드 + 위 하이라이트 띠
+function bakePopTile(colorKey) {
+  const S = 184, c = mkCanvas(S, S), g = c.getContext('2d');
+  const base = PAL.colors[colorKey], dark = PAL.colorsDark[colorKey], light = PAL.colorsLight[colorKey];
+  // 몸통(아래 두께)
+  rr(g, 6, 14, S - 12, S - 20, 34); g.fillStyle = dark; g.fill();
+  // 윗면
+  const grd = g.createLinearGradient(0, 6, 0, S - 26);
+  grd.addColorStop(0, shade(base, 0.18)); grd.addColorStop(1, base);
+  rr(g, 6, 6, S - 12, S - 26, 34); g.fillStyle = grd; g.fill();
+  // 3×3 알 돔
+  for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) {
+    const cx = 40 + q * 52, cy = 36 + r * 50, rad = 23;
+    const dg = g.createRadialGradient(cx - 7, cy - 9, 3, cx, cy, rad);
+    dg.addColorStop(0, light); dg.addColorStop(0.65, base); dg.addColorStop(1, shade(base, -0.16));
+    g.beginPath(); g.arc(cx, cy, rad, 0, TAU); g.fillStyle = dg; g.fill();
+  }
+  return c;
+}
+// 알이 빠진 팝잇 프레임(우물만) — 방출 진행 표시
+function bakePopFrame(colorKey) {
+  const S = 184, c = mkCanvas(S, S), g = c.getContext('2d');
+  const base = PAL.colors[colorKey], dark = PAL.colorsDark[colorKey];
+  rr(g, 6, 14, S - 12, S - 20, 34); g.fillStyle = dark; g.fill();
+  const grd = g.createLinearGradient(0, 6, 0, S - 26);
+  grd.addColorStop(0, shade(base, 0.18)); grd.addColorStop(1, base);
+  rr(g, 6, 6, S - 12, S - 26, 34); g.fillStyle = grd; g.fill();
+  for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) {
+    const cx = 40 + q * 52, cy = 36 + r * 50, rad = 20;
+    const dg = g.createRadialGradient(cx, cy + 4, 2, cx, cy, rad);
+    dg.addColorStop(0, shade(base, -0.42)); dg.addColorStop(1, shade(base, -0.2));
+    g.beginPath(); g.ellipse(cx, cy, rad, rad * 0.88, 0, 0, TAU); g.fillStyle = dg; g.fill();
+  }
+  return c;
+}
+// 플레인 블록(미노출)
+function bakePlainTile(colorKey) {
+  const S = 184, c = mkCanvas(S, S), g = c.getContext('2d');
+  const base = PAL.colors[colorKey], dark = PAL.colorsDark[colorKey];
+  rr(g, 8, 16, S - 16, S - 22, 30); g.fillStyle = dark; g.fill();
+  const grd = g.createLinearGradient(0, 8, 0, S - 24);
+  grd.addColorStop(0, shade(base, 0.22)); grd.addColorStop(1, base);
+  rr(g, 8, 8, S - 16, S - 26, 30); g.fillStyle = grd; g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.28)';
+  rr(g, 22, 18, S - 44, 34, 18); g.fill();
+  return c;
+}
+// 빈자리 시트
+function bakeSeat() {
+  const S = 160, c = mkCanvas(S, S), g = c.getContext('2d');
+  rr(g, 12, 12, S - 24, S - 24, 26); g.fillStyle = PAL.seat; g.fill();
+  return c;
+}
+// 공(색별 광택 볼)
+function bakeBall(colorKey) {
+  const S = 96, c = mkCanvas(S, S), g = c.getContext('2d');
+  const base = PAL.colors[colorKey];
+  const dg = g.createRadialGradient(S * 0.38, S * 0.32, 4, S / 2, S / 2, S * 0.46);
+  dg.addColorStop(0, PAL.colorsLight[colorKey]); dg.addColorStop(0.55, base); dg.addColorStop(1, shade(base, -0.25));
+  g.beginPath(); g.arc(S / 2, S / 2, S * 0.46, 0, TAU); g.fillStyle = dg; g.fill();
+  g.beginPath(); g.ellipse(S * 0.38, S * 0.28, S * 0.13, S * 0.08, -0.5, 0, TAU);
+  g.fillStyle = 'rgba(255,255,255,0.75)'; g.fill();
+  return c;
+}
+// 트레이 캡(구멍 3) / 대기 밴드
+function bakeTrayCap(colorKey) {
+  const W = 256, H = 168, c = mkCanvas(W, H), g = c.getContext('2d');
+  const base = PAL.colors[colorKey], dark = PAL.colorsDark[colorKey];
+  rr(g, 6, 26, W - 12, H - 32, 38); g.fillStyle = dark; g.fill();
+  const grd = g.createLinearGradient(0, 6, 0, H - 20);
+  grd.addColorStop(0, shade(base, 0.2)); grd.addColorStop(1, base);
+  rr(g, 6, 6, W - 12, H - 38, 38); g.fillStyle = grd; g.fill();
+  for (let i = 0; i < 3; i++) {
+    const cx = 62 + i * 66, cy = 62;
+    const hg = g.createRadialGradient(cx, cy + 6, 2, cx, cy, 26);
+    hg.addColorStop(0, shade(base, -0.5)); hg.addColorStop(1, shade(base, -0.24));
+    g.beginPath(); g.ellipse(cx, cy, 26, 22, 0, 0, TAU); g.fillStyle = hg; g.fill();
+  }
+  return c;
+}
+function bakeTrayBand(colorKey) {
+  const W = 256, H = 128, c = mkCanvas(W, H), g = c.getContext('2d');
+  const base = PAL.colors[colorKey], dark = PAL.colorsDark[colorKey];
+  rr(g, 6, 22, W - 12, H - 28, 34); g.fillStyle = dark; g.fill();
+  const grd = g.createLinearGradient(0, 4, 0, H - 24);
+  grd.addColorStop(0, shade(base, 0.2)); grd.addColorStop(1, base);
+  rr(g, 6, 4, W - 12, H - 30, 34); g.fillStyle = grd; g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.24)';
+  rr(g, 20, 12, W - 40, 24, 14); g.fill();
+  return c;
+}
+function bakeAllArt() {
+  ART.tilePop = {}; ART.tileFrame = {}; ART.tilePlain = {}; ART.ball = {}; ART.cap = {}; ART.band = {};
+  for (const k of COLOR_KEYS) {
+    ART.tilePop[k] = bakePopTile(k);
+    ART.tileFrame[k] = bakePopFrame(k);
+    ART.tilePlain[k] = bakePlainTile(k);
+    ART.ball[k] = bakeBall(k);
+    ART.cap[k] = bakeTrayCap(k);
+    ART.band[k] = bakeTrayBand(k);
+  }
+  ART.seat = bakeSeat();
+}
+// ── 자체 미니 물리: 버렛 원 + 정적 세그먼트 벽 ─────────────────────────
+//  matter.js 미사용 — 이 게임에 필요한 만큼만 직접 구현(중력, 원끼리 밀어내기, 벽 반사).
+'use strict';
+
+class Phys2 {
+  constructor() {
+    this.orbs = new Map();       // id → {x,y,px,py,r,free,colorKey}
+    this.segs = [];              // 벽 세그먼트 {x1,y1,x2,y2}
+    this.g = 0.55;               // 중력(px/tick²)
+    this.iter = 5;
+  }
+  addSeg(x1, y1, x2, y2) { this.segs.push({ x1, y1, x2, y2 }); }
+  spawn(id, colorKey, x, y, vx, vy) {
+    this.orbs.set(id, { id, colorKey, x, y, px: x - vx, py: y - vy, r: BALL_R, free: true });
+  }
+  remove(id) { this.orbs.delete(id); }
+  pin(id) { const o = this.orbs.get(id); if (o) o.free = false; }
+  unpin(id, vx = 0, vy = 0) { const o = this.orbs.get(id); if (o) { o.free = true; o.px = o.x - vx; o.py = o.y - vy; } }
+  place(id, x, y) { const o = this.orbs.get(id); if (o) { o.x = x; o.y = y; o.px = x; o.py = y; } }
+  step() {
+    // 적분
+    for (const o of this.orbs.values()) {
+      if (!o.free) continue;
+      const vx = (o.x - o.px) * 0.995, vy = (o.y - o.py) * 0.995 + this.g;
+      o.px = o.x; o.py = o.y; o.x += vx; o.y += vy;
+    }
+    // 반복 제약
+    for (let it = 0; it < this.iter; it++) {
+      // 원-원(자유 공끼리 + 자유↔고정은 고정이 안 밀림)
+      const arr = [...this.orbs.values()];
+      for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
+        const a = arr[i], b = arr[j];
+        if (!a.free && !b.free) continue;
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d2 = dx * dx + dy * dy; const min = a.r + b.r;
+        if (d2 >= min * min || d2 === 0) continue;
+        const d = Math.sqrt(d2), pen = (min - d) / d;
+        dx *= pen * 0.5; dy *= pen * 0.5;
+        if (a.free && b.free) { a.x -= dx; a.y -= dy; b.x += dx; b.y += dy; }
+        else if (a.free) { a.x -= dx * 2; a.y -= dy * 2; }
+        else { b.x += dx * 2; b.y += dy * 2; }
+      }
+      // 원-세그먼트
+      for (const o of this.orbs.values()) {
+        if (!o.free) continue;
+        for (const s of this.segs) {
+          const sx = s.x2 - s.x1, sy = s.y2 - s.y1;
+          const L2 = sx * sx + sy * sy; if (!L2) continue;
+          let t = ((o.x - s.x1) * sx + (o.y - s.y1) * sy) / L2;
+          t = clamp(t, 0, 1);
+          const cx = s.x1 + sx * t, cy = s.y1 + sy * t;
+          let dx = o.x - cx, dy = o.y - cy;
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= o.r * o.r || d2 === 0) continue;
+          const d = Math.sqrt(d2), pen = o.r - d;
+          o.x += (dx / d) * pen; o.y += (dy / d) * pen;
+        }
+      }
+    }
+  }
+}
+
+// ── 레벨 데이터(신규 포맷) ─────────────────────────────────────────────
+//  board.rows: 문자 그리드 — '.'=존 밖, '_'=빈칸(시트), 대문자=플레인 블록, 소문자=팝잇(노출)
+//  색 문자: g/b/o/y/r/p. trays: 열별 스택(위=활성 캡부터).
+const CH2KEY = { g: 'green', b: 'blue', o: 'orange', y: 'yellow', r: 'red', p: 'purple' };
+const LEVELS2 = [
+  { id: 1, rows: ['gg', 'bb', 'oo'], off: [1, 0], trays: [['green','blue','orange'], ['blue','green','orange'], ['orange','green','blue'], ['blue','orange','green']] },
+  { id: 2, rows: ['gby', 'ygb', 'byg'], off: [1, 0], trays: [['green','yellow','blue'], ['yellow','blue','green'], ['blue','green','yellow'], ['green','blue','yellow']] },
+  { id: 3, rows: ['obg', 'gob', 'bgo'], off: [1, 0], trays: [['orange','green','blue'], ['green','blue','orange'], ['blue','orange','green'], ['orange','blue','green']] },
+  // ★레벨 4 = 레퍼런스 영상 실측 맵(계단형 존 + 4색)
+  { id: 4, rows: ['GB...', 'BO...', 'yOBG.', 'gyoo.'], off: [0, 0],
+    trays: [
+      ['orange','green','blue','yellow','green'],
+      ['yellow','blue','orange','green','blue'],
+      ['blue','orange','green','orange','yellow'],
+      ['green','yellow','yellow','blue','orange'],
+    ] },
+  { id: 5, rows: ['GBOG', 'OYBY', 'gboy', 'ybgo'], off: [0, 0],
+    trays: [
+      ['green','orange','yellow','blue','green','orange'],
+      ['blue','yellow','green','orange','blue','yellow'],
+      ['orange','blue','blue','yellow','orange','green'],
+      ['yellow','green','orange','green','yellow','blue'],
+    ] },
+  { id: 6, rows: ['RBOG', 'GYRB', 'obry', 'ygbo', 'rogb'], off: [0, 0],
+    trays: [
+      ['orange','red','green','blue','yellow','red','green'],
+      ['yellow','blue','orange','red','green','blue','... '],
+      ['blue','green','red','yellow','orange','green','red'],
+      ['red','orange','yellow','green','blue','yellow','blue'],
+    ] },
+];
+// 레벨 6 trays 자리표시 정정 + 공급=수요 자동 검증/보정
+function normalizeLevel(lv) {
+  const supply = {};
+  for (const row of lv.rows) for (const ch of row) {
+    const k = CH2KEY[ch.toLowerCase()]; if (k) supply[k] = (supply[k] || 0) + 9;
+  }
+  const demand = {};
+  const flat = [];
+  for (const col of lv.trays) for (const c of col) if (CH2KEY[c] || COLOR_KEYS.includes(c)) flat.push(c);
+  for (const c of flat) demand[c] = (demand[c] || 0) + 3;
+  // 보정: 수요 흘러넘침/부족 시 트레이를 공급에 맞춰 재구성(색별 supply/3 개의 트레이를 열에 라운드로빈)
+  let ok = true;
+  for (const k in supply) if ((demand[k] || 0) * 1 !== supply[k] / 3 * 3 || supply[k] % 3) ok = false;
+  for (const k in demand) if (!supply[k]) ok = false;
+  let total = 0; for (const k in supply) total += supply[k] / 3;
+  let dTotal = flat.length;
+  if (!ok || total !== dTotal) {
+    const pool = [];
+    for (const k in supply) for (let i = 0; i < supply[k] / 3; i++) pool.push(k);
+    // 안정 셔플(레벨 id 시드)
+    let s = lv.id * 9301 + 49297;
+    const rnd = () => { s = (s * 233280 + 9301) % 2147483647; return (s % 1000) / 1000; };
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    // 같은 색 트레이가 4열 활성캡에 동시에 몰리지 않게 인터리브 배분
+    const cols = [[], [], [], []];
+    pool.forEach((k, i) => cols[i % 4].push(k));
+    lv.trays = cols;
+  }
+  return lv;
+}
+// ── 게임 상태/로직 (신규 구현) ─────────────────────────────────────────
+'use strict';
+
+const RAIL = {
+  L: LO.railL, R: LO.railR, T: LO.railTop, B: LO.railBot,
+  get cy() { return (this.T + this.B) / 2; },
+  get rad() { return (this.B - this.T) / 2 + BALL_R * 1.15; },   // 반원 회전 반경(시각 궤도)
+  get straight() { return this.R - this.L; },
+  get perim() { return 2 * this.straight + TAU * this.rad; },
+  sockets: 26,
+  speed: 300 / 60,                     // px/tick (영상 실측 스케일)
+};
+// 둘레 s → 좌표(윗줄: s 0..straight 왼→오 증가, 시계). 진행은 s 감소(윗줄 왼쪽으로).
+function railPt(s) {
+  const P = RAIL.perim, st = RAIL.straight, r = RAIL.rad;
+  let p = ((s % P) + P) % P;
+  if (p < st) return { x: RAIL.L + p, y: RAIL.T, top: true };
+  p -= st;
+  const half = TAU * r / 2;
+  if (p < half) { const a = p / r - Math.PI / 2; return { x: RAIL.R + Math.cos(a) * r, y: RAIL.cy + Math.sin(a) * r, top: false }; }
+  p -= half;
+  if (p < st) return { x: RAIL.R - p, y: RAIL.B, top: false };
+  p -= st;
+  const a = p / r + Math.PI / 2;
+  return { x: RAIL.L + Math.cos(a) * r, y: RAIL.cy + Math.sin(a) * r, top: false };
+}
+
+function makeGame(levelIdx) {
+  const lv = normalizeLevel(JSON.parse(JSON.stringify(LEVELS2[clamp(levelIdx - 1, 0, LEVELS2.length - 1)])));
+  const G = {
+    lvId: lv.id, status: 'playing', coins: +(localStorage.ms2_coins || 575),
+    phys: new Phys2(), nextId: 1,
+    tiles: [], seats: [], balls: new Map(),
+    trays: [], railOff: 0, colQ: [null, null],   // 입구 컬럼(아래, 위)
+    fx: [], shakeT: 0, tapLock: 0, failT: 0,
+  };
+  // 보드 타일
+  const cols = Math.max(...lv.rows.map(r => r.length));
+  const bw = cols * LO.boardCell;
+  const bx0 = (DW - bw) / 2 + (lv.off ? lv.off[0] * LO.boardCell : 0);
+  lv.rows.forEach((row, r) => {
+    [...row].forEach((ch, q) => {
+      if (ch === '.') return;
+      const x = bx0 + q * LO.boardCell + LO.boardCell / 2;
+      const y = LO.boardTopY + r * LO.boardCell + LO.boardCell / 2;
+      G.seats.push({ x, y });
+      if (ch === '_') return;
+      const key = CH2KEY[ch.toLowerCase()];
+      G.tiles.push({ col: q, row: r, x, y, colorKey: key, exposed: ch === ch.toLowerCase(), left: 9, gone: [], pour: null });
+    });
+  });
+  // 노출 갱신: 같은 열에서 자기 아래(행+1)에 타일이 없으면 노출
+  G.exposeTick = () => {
+    for (const t of G.tiles) {
+      if (t.exposed || t.left <= 0) continue;
+      const below = G.tiles.find(o => o !== t && o.col === t.col && o.row === t.row + 1 && o.left > 0);
+      if (!below) { t.exposed = true; G.fx.push({ k: 'expose', x: t.x, y: t.y, t: 0 }); }
+    }
+  };
+  // 트레이
+  const gapX = (DW - 4 * LO.trayW) / 5;
+  lv.trays.forEach((stack, i) => {
+    G.trays.push({ i, x: gapX + LO.trayW / 2 + i * (LO.trayW + gapX), stack: stack.slice(), holes: [null, null, null], incoming: 0, lift: null, riseT: 1 });
+  });
+  // 물리 벽: 깔때기(보드존 하단 → 목구멍) + 좌우 플레이 경계 + 입구 컬럼 게이트 + 선반
+  const P = G.phys;
+  P.addSeg(30, 0, 30, DH); P.addSeg(DW - 30, 0, DW - 30, DH);
+  const mid = DW / 2, mh = LO.mouthHalf;
+  P.addSeg(40, LO.zoneBotY, mid - mh, LO.funnelTipY);            // 좌 경사
+  P.addSeg(DW - 40, LO.zoneBotY, mid + mh, LO.funnelTipY);       // 우 경사
+  P.addSeg(mid - mh, LO.funnelTipY, mid - mh - 10, RAIL.T - 8);  // 목 좌(살짝 안쪽 테이퍼)
+  P.addSeg(mid + mh, LO.funnelTipY, mid + mh + 10, RAIL.T - 8);  // 목 우
+  const shelfY = RAIL.T - BALL_R * 4.9;                          // 영구 선반(대기열 지지)
+  P.addSeg(mid - mh - 6, shelfY, mid + mh + 6, shelfY);
+  G.shelfY = shelfY;
+  return G;
+}
+
+// ── 방출: 팝잇 타일 탭 → 9→1 순서(아랫줄 오른쪽부터) 자기 알 자리에서 클러스터 롤 ──
+function tapTile(G, t) {
+  if (G.status !== 'playing' || !t.exposed || t.left <= 0 || t.pour) return false;
+  t.pour = { seq: 0, cd: 0 };
+  return true;
+}
+function pourTick(G, dt) {
+  for (const t of G.tiles) {
+    if (!t.pour || t.left <= 0) continue;
+    t.pour.cd -= dt;
+    if (t.pour.cd > 0) continue;
+    const seq = t.pour.seq++;              // 0..8 → 도트 인덱스 8..0 (9→1)
+    if (seq >= 9) { t.pour = null; continue; }
+    t.pour.cd = 0.065;
+    const dot = 8 - seq;
+    const dr = Math.floor(dot / 3), dq = dot % 3;
+    const ox = t.x + (dq - 1) * 29, oy = t.y + (dr - 1) * 27;
+    t.gone.push(dot); t.left--;
+    const id = G.nextId++;
+    G.phys.spawn(id, t.colorKey, ox, oy + 18, 0, 2.4);
+    G.balls.set(id, { id, colorKey: t.colorKey, mode: 'fall' });
+    if (t.left <= 0) { G.fx.push({ k: 'tilePop', x: t.x, y: t.y, colorKey: t.colorKey, t: 0 }); G.exposeTick(); }
+  }
+}
+
+// ── 입구 컬럼(FIFO 2칸) + 레일 탑승 ───────────────────────────────────
+function columnTick(G, dt) {
+  const mid = DW / 2;
+  const slotYs = [RAIL.T - BALL_R * 1.1, RAIL.T - BALL_R * 1.1 - BALL_D * 1.04];
+  // 비우기(탑승/소멸)
+  for (let i = 0; i < 2; i++) {
+    const id = G.colQ[i];
+    if (id != null && (!G.balls.has(id) || G.balls.get(id).mode !== 'queue')) G.colQ[i] = null;
+  }
+  // 시프트
+  if (G.colQ[0] == null && G.colQ[1] != null) {
+    G.colQ[0] = G.colQ[1]; G.colQ[1] = null;
+    const m = G.balls.get(G.colQ[0]); if (m) { m.qT = 0; m.qFrom = null; }
+  }
+  // 입장: 선반 위 대기 공(중앙 근접 우선)
+  const free = G.colQ[0] == null ? 0 : (G.colQ[1] == null ? 1 : -1);
+  if (free >= 0) {
+    let best = null, bd = 1e9;
+    for (const [id, m] of G.balls) {
+      if (m.mode !== 'fall') continue;
+      const o = G.phys.orbs.get(id); if (!o) continue;
+      const dy = Math.abs(o.y - (G.shelfY - BALL_R));
+      const dx = Math.abs(o.x - mid);
+      if (dy > BALL_R * 2.4 || dx > LO.mouthHalf + 44) continue;
+      if (dx < bd) { bd = dx; best = id; }
+    }
+    if (best != null) {
+      const m = G.balls.get(best); const o = G.phys.orbs.get(best);
+      m.mode = 'queue'; m.qT = 0; m.qFrom = { x: o.x, y: o.y };
+      G.colQ[free] = best;
+      G.phys.pin(best);
+    }
+  }
+  // 트윈/고정 위치
+  for (let i = 0; i < 2; i++) {
+    const id = G.colQ[i]; if (id == null) continue;
+    const m = G.balls.get(id); const o = G.phys.orbs.get(id); if (!m || !o) continue;
+    if (m.qT != null && m.qT < 1) {
+      if (!m.qFrom) m.qFrom = { x: o.x, y: o.y };
+      m.qT = Math.min(1, m.qT + dt / 0.16);
+      const e = smooth(m.qT);
+      G.phys.place(id, lerp(m.qFrom.x, mid, e), lerp(m.qFrom.y, slotYs[i], e));
+      if (m.qT >= 1) { m.qT = null; m.qFrom = null; }
+    } else {
+      G.phys.place(id, mid, slotYs[i]);
+    }
+  }
+  // 탑승: 컬럼 slot0 공 — 상류(오른쪽) 반지름 내로 빈 소켓이 오면 그 소켓에 배정(수직 낙하 동안 도착)
+  const id0 = G.colQ[0];
+  if (id0 != null) {
+    const m = G.balls.get(id0);
+    if (m && m.mode === 'queue' && m.qT == null) {
+      const N = RAIL.sockets, gap = RAIL.perim / N;
+      const occ = new Set();
+      for (const b of G.balls.values()) if (b.mode === 'ride') occ.add(b.socket);
+      for (let k = 0; k < N; k++) {
+        if (occ.has(k)) continue;
+        const arc = ((k * gap + G.railOff) % RAIL.perim + RAIL.perim) % RAIL.perim;
+        const pt = railPt(arc);
+        if (!pt.top) continue;
+        const dxs = pt.x - mid;
+        if (dxs < -BALL_R * 0.2 || dxs > BALL_R * 1.1) continue;
+        // 근접 라이더 실위치 간섭 검사
+        let blocked = false;
+        for (const b of G.balls.values()) {
+          if (b.mode !== 'ride' || b.socket === k) continue;
+          let dd = Math.abs(b.s - arc); dd = Math.min(dd, RAIL.perim - dd);
+          if (dd < BALL_D * 0.95) { blocked = true; break; }
+        }
+        if (blocked) continue;
+        m.mode = 'ride'; m.socket = k; m.s = arc;
+        m.dropY = slotYs[0]; m.dropT = 0;
+        G.fx.push({ k: 'land', id: id0, t: -0.12 });
+        break;
+      }
+    }
+  }
+}
+
+// ── 레일 순환 + 트레이 드롭 ───────────────────────────────────────────
+function railTick(G, dt) {
+  const P = RAIL.perim, N = RAIL.sockets, gap = P / N;
+  const adv = RAIL.speed * (dt * 60);
+  G.railOff = ((G.railOff - adv) % P + P) % P;
+  for (const [id, m] of G.balls) {
+    if (m.mode !== 'ride') continue;
+    m.s = ((m.socket * gap + G.railOff) % P + P) % P;
+    const pt = railPt(m.s);
+    let y = pt.y;
+    if (m.dropT != null) {           // 탑승 수직 안착(짧은 낙하 잔여)
+      m.dropT = Math.min(1, m.dropT + dt / 0.12);
+      const k = (1 - m.dropT) * (1 - m.dropT);
+      y = lerp(pt.y, m.dropY, k);
+      if (m.dropT >= 1) m.dropT = null;
+    }
+    G.phys.place(id, pt.x, y);
+    // 트레이 드롭 판정(윗줄 → 자기색 활성 트레이 예약 구멍 위 통과 시)
+    if (!pt.top || m.dropT != null) continue;
+    for (const tr of G.trays) {
+      if (tr.lift || !tr.stack.length || tr.stack[0] !== m.colorKey) continue;
+      const h = tr.holes.filter(v => v != null).length + tr.incoming;
+      if (h >= 3) continue;
+      const hx = tr.x + (h - 1) * 38;
+      if (Math.abs(pt.x - hx) < adv * 1.6 + 2 && pt.x >= hx) {
+        m.mode = 'drop'; m.from = { x: pt.x, y: pt.y }; m.to = { x: hx, y: LO.trayTopY + 34 }; m.t = 0; m.hole = h;
+        tr.incoming++; m.tray = tr.i;
+        break;
+      }
+    }
+  }
+}
+function dropTick(G, dt) {
+  for (const [id, m] of G.balls) {
+    if (m.mode !== 'drop') continue;
+    m.t = Math.min(1, m.t + dt / 0.2);
+    const e = m.t, arc = Math.sin(e * Math.PI) * 14;
+    G.phys.place(id, lerp(m.from.x, m.to.x, e), lerp(m.from.y, m.to.y, e * e) - arc);
+    if (m.t >= 1) {
+      const tr = G.trays[m.tray];
+      tr.holes[m.hole] = m.colorKey; tr.incoming--;
+      m.mode = 'seated'; G.phys.pin(id); G.phys.place(id, m.to.x, m.to.y);
+      m.seat = { tray: m.tray, hole: m.hole };
+      G.fx.push({ k: 'pop', x: m.to.x, y: m.to.y, t: 0 });
+      if (tr.holes.every(v => v != null)) { tr.lift = { t: 0 }; }
+    }
+  }
+}
+// 트레이 완성: 공 3개를 담은 채 레일 위로 떠올라 별 팝 → 스택 전진
+function trayTick(G, dt) {
+  for (const tr of G.trays) {
+    if (tr.riseT < 1) tr.riseT = Math.min(1, tr.riseT + dt / 0.22);
+    if (!tr.lift) continue;
+    tr.lift.t += dt / 0.55;
+    const e = smooth(clamp(tr.lift.t, 0, 1));
+    tr.liftY = lerp(0, -(LO.trayTopY - RAIL.T + 60), e);
+    // 담긴 공도 같이
+    for (const [id, m] of G.balls) {
+      if (m.mode === 'seated' && m.seat && m.seat.tray === tr.i)
+        G.phys.place(id, tr.x + (m.seat.hole - 1) * 38, LO.trayTopY + 34 + tr.liftY);
+    }
+    if (tr.lift.t >= 1) {
+      G.fx.push({ k: 'burst', x: tr.x, y: LO.trayTopY + tr.liftY, t: 0 });
+      for (const [id, m] of [...G.balls]) {
+        if (m.mode === 'seated' && m.seat && m.seat.tray === tr.i) { G.phys.remove(id); G.balls.delete(id); }
+      }
+      tr.stack.shift(); tr.holes = [null, null, null]; tr.lift = null; tr.liftY = 0; tr.riseT = 0;
+      G.coins += 10; localStorage.ms2_coins = G.coins;
+    }
+  }
+}
+// 승패
+function winFailTick(G, dt) {
+  if (G.status !== 'playing') return;
+  const tilesLeft = G.tiles.some(t => t.left > 0);
+  const traysLeft = G.trays.some(t => t.stack.length > 0);
+  const active = G.balls.size > 0;
+  if (!tilesLeft && !traysLeft && !active) { G.status = 'won'; G.fx.push({ k: 'win', t: 0 }); return; }
+  // 실패 = 레일 포화 + 목이 막힘(윗줄 소켓 전부 점유 상태 지속)
+  const N = RAIL.sockets;
+  let riders = 0; for (const m of G.balls.values()) if (m.mode === 'ride') riders++;
+  const waiting = [...G.balls.values()].some(m => m.mode === 'fall' || m.mode === 'queue');
+  if (riders >= N - 1 && waiting) { G.failT += dt; if (G.failT > 2.2) G.status = 'lost'; }
+  else G.failT = 0;
+}
+// ── 렌더러 + UI + 부팅 (신규 구현) ─────────────────────────────────────
+'use strict';
+
+let CV, CX, SCALE = 1, OX = 0, OY = 0;
+function fitCanvas() {
+  const w = innerWidth, h = innerHeight;
+  CV.width = w * devicePixelRatio; CV.height = h * devicePixelRatio;
+  CV.style.width = w + 'px'; CV.style.height = h + 'px';
+  SCALE = Math.min(w / DW, h / DH) * devicePixelRatio;
+  OX = (CV.width - DW * SCALE) / 2; OY = (CV.height - DH * SCALE) / 2;
+}
+function toGame(cx, cy) {
+  return { x: (cx * devicePixelRatio - OX) / SCALE, y: (cy * devicePixelRatio - OY) / SCALE };
+}
+
+// 존 실루엣(보드 몰드): 계단형 라운드 패스(레벨 좌석 bbox 기반)
+function zonePath(g, G, pad) {
+  const xs = G.seats.map(s => s.x), ys = G.seats.map(s => s.y);
+  const half = LO.boardCell / 2 + pad;
+  const x0 = Math.min(...xs) - half, x1 = Math.max(...xs) + half;
+  const y0 = Math.min(...ys) - half;
+  // 행별 우측 한계로 계단 구성
+  const rows = {};
+  for (const s of G.seats) { const r = Math.round((s.y - LO.boardTopY) / LO.boardCell); rows[r] = Math.max(rows[r] || -1e9, s.x + half); }
+  const keys = Object.keys(rows).map(Number).sort((a, b) => a - b);
+  g.beginPath();
+  g.moveTo(x0 + 26, y0);
+  let prevX = null;
+  keys.forEach((r) => {
+    const yTop = LO.boardTopY + r * LO.boardCell - half + (r === keys[0] ? 0 : 0);
+    const yBot = LO.boardTopY + r * LO.boardCell + half;
+    const rx = rows[r];
+    if (prevX == null) { g.lineTo(rx - 26, y0); g.arcTo(rx, y0, rx, y0 + 26, 26); }
+    else if (Math.abs(rx - prevX) > 2) { g.arcTo(prevX, yTop, rx, yTop, 22); g.arcTo(rx, yTop, rx, yBot, 22); }
+    g.lineTo(rx, yBot - 26);
+    prevX = rx;
+  });
+  const yEnd = LO.boardTopY + keys[keys.length - 1] * LO.boardCell + half;
+  g.arcTo(prevX, yEnd, x0, yEnd, 26);
+  g.lineTo(x0 + 26, yEnd);
+  g.arcTo(x0, yEnd, x0, yEnd - 26, 26);
+  g.lineTo(x0, y0 + 26);
+  g.arcTo(x0, y0, x0 + 26, y0, 26);
+  g.closePath();
+}
+
+function draw(G, dt) {
+  const g = CX;
+  g.setTransform(SCALE, 0, 0, SCALE, OX, OY);
+  // 배경 + 상/하 존
+  g.fillStyle = PAL.bg; g.fillRect(-OX / SCALE, -OY / SCALE, DW + OX * 2 / SCALE, DH + OY * 2 / SCALE);
+  // 상부 몰드(보드 존 배경판)
+  g.fillStyle = PAL.wall; rr(g, 22, LO.zoneTopY - 18, DW - 44, LO.zoneBotY - LO.zoneTopY + 40, 44); g.fill();
+  g.fillStyle = PAL.zoneTop; rr(g, 34, LO.zoneTopY, DW - 68, LO.zoneBotY - LO.zoneTopY, 36); g.fill();
+  // 깔때기(하부 존으로 수렴하는 밝은 통로)
+  const mid = DW / 2, mh = LO.mouthHalf;
+  g.fillStyle = PAL.zoneBot;
+  g.beginPath();
+  g.moveTo(44, LO.zoneBotY - 6);
+  g.lineTo(DW - 44, LO.zoneBotY - 6);
+  g.lineTo(mid + mh + 14, LO.funnelTipY);
+  g.lineTo(mid + mh + 24, RAIL.B + 84);
+  g.lineTo(mid - mh - 24, RAIL.B + 84);
+  g.lineTo(mid - mh - 14, LO.funnelTipY);
+  g.closePath(); g.fill();
+  // 하부 몰드(레일 방)
+  g.fillStyle = PAL.wall; rr(g, 30, RAIL.T - 96, DW - 60, DH - (RAIL.T - 96) - 14, 46); g.fill();
+  g.fillStyle = PAL.zoneBot; rr(g, 44, RAIL.T - 82, DW - 88, DH - (RAIL.T - 82) - 26, 38); g.fill();
+  // 보드 존 실루엣(음각 몰드)
+  g.save();
+  zonePath(g, G, 26); g.fillStyle = 'rgba(61,82,136,0.55)'; g.fill();
+  zonePath(g, G, 16); g.fillStyle = PAL.zoneBot; g.fill();
+  g.restore();
+  // 시트 + 타일
+  for (const s of G.seats) g.drawImage(ART.seat, s.x - 46, s.y - 46, 92, 92);
+  for (const t of G.tiles) {
+    if (t.left <= 0) continue;
+    const img = !t.exposed ? ART.tilePlain[t.colorKey] : (t.gone.length ? ART.tileFrame[t.colorKey] : ART.tilePop[t.colorKey]);
+    g.drawImage(img, t.x - 46, t.y - 46, 92, 92);
+    if (t.exposed && t.gone.length) {   // 남은 알만 다시 그림
+      for (let d = 0; d < 9; d++) {
+        if (t.gone.includes(d)) continue;
+        const dr = Math.floor(d / 3), dq = d % 3;
+        g.drawImage(ART.ball[t.colorKey], t.x + (dq - 1) * 29 - 12, t.y + (dr - 1) * 27 - 12, 24, 24);
+      }
+    }
+  }
+  // 레일 트랙(스타디움 + 소켓 + 슬릿)
+  g.lineCap = 'round';
+  g.strokeStyle = PAL.railBody; g.lineWidth = (RAIL.B - RAIL.T) + BALL_D * 2.4;
+  g.beginPath(); g.moveTo(RAIL.L, RAIL.cy); g.lineTo(RAIL.R, RAIL.cy); g.stroke();
+  const N = RAIL.sockets, gap = RAIL.perim / N;
+  for (let k = 0; k < N; k++) {
+    const pt = railPt(k * gap + G.railOff);
+    g.beginPath(); g.ellipse(pt.x, pt.y, 13, 15, 0, 0, TAU);
+    g.fillStyle = PAL.railSocket; g.fill();
+  }
+  g.strokeStyle = PAL.railSlit; g.lineWidth = 10;
+  g.beginPath(); g.moveTo(RAIL.L + 6, RAIL.cy); g.lineTo(RAIL.R - 20, RAIL.cy); g.stroke();
+  // 트레이(대기 밴드 → 캡 → 구멍 공)
+  for (const tr of G.trays) {
+    const capY = LO.trayTopY + (tr.lift ? tr.liftY || 0 : 0);
+    const rise = (1 - tr.riseT) * LO.trayBandH;
+    for (let b = Math.min(tr.stack.length - 1, 4); b >= 1; b--) {
+      const y = LO.trayTopY + 44 + b * LO.trayBandH + rise;
+      g.drawImage(ART.band[PAL.colors[tr.stack[b]] ? tr.stack[b] : 'green'], tr.x - LO.trayW / 2, y, LO.trayW, LO.trayBandH + 18);
+    }
+    if (tr.stack.length) g.drawImage(ART.cap[tr.stack[0]], tr.x - LO.trayW / 2, capY - 10 + rise, LO.trayW, LO.trayCapH);
+  }
+  // 공
+  for (const [id, m] of G.balls) {
+    const o = G.phys.orbs.get(id); if (!o) continue;
+    g.drawImage(ART.ball[m.colorKey], o.x - BALL_R, o.y - BALL_R, BALL_D, BALL_D);
+  }
+  // FX
+  for (const f of G.fx) {
+    f.t += dt;
+    if (f.k === 'burst') {
+      const e = clamp(f.t / 0.5, 0, 1);
+      g.save(); g.globalAlpha = 1 - e; g.fillStyle = '#FFFFFF';
+      for (let i = 0; i < 5; i++) {
+        const a = i / 5 * TAU + 0.5, rr2 = 26 + e * 62;
+        star(g, f.x + Math.cos(a) * rr2, f.y + Math.sin(a) * rr2, 13 * (1 - e * 0.4));
+      }
+      g.restore();
+    } else if (f.k === 'pop') {
+      const e = clamp(f.t / 0.3, 0, 1);
+      g.save(); g.globalAlpha = 0.7 * (1 - e); g.strokeStyle = '#fff'; g.lineWidth = 4;
+      g.beginPath(); g.arc(f.x, f.y, 14 + e * 22, 0, TAU); g.stroke(); g.restore();
+    } else if (f.k === 'tilePop') {
+      const e = clamp(f.t / 0.35, 0, 1);
+      g.save(); g.globalAlpha = 1 - e;
+      g.drawImage(ART.tileFrame[f.colorKey], f.x - 46 - e * 14, f.y - 46 - e * 14, 92 + e * 28, 92 + e * 28);
+      g.restore();
+    }
+  }
+  G.fx = G.fx.filter(f => f.t < 0.6);
+  drawHud(G);
+  if (G.status !== 'playing') drawEnd(G);
+}
+function star(g, x, y, r) {
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * TAU - Math.PI / 2, rad = i % 2 ? r * 0.45 : r;
+    g[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rad, y + Math.sin(a) * rad);
+  }
+  g.closePath(); g.fill();
+}
+function pill(g, x, y, w, h, fill, text, tSize) {
+  g.fillStyle = shade(fill, -0.28); rr(g, x, y + 5, w, h, h / 2); g.fill();
+  g.fillStyle = fill; rr(g, x, y, w, h, h / 2); g.fill();
+  if (text) {
+    g.fillStyle = '#fff'; g.font = `800 ${tSize || 28}px system-ui, sans-serif`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, x + w / 2, y + h / 2 + 1);
+  }
+}
+function drawHud(G) {
+  const g = CX;
+  // 설정 버튼
+  pill(g, 26, LO.hudY - 30, 64, 60, PAL.hudPill, '⚙', 30);
+  // 레벨 배지
+  pill(g, DW / 2 - 105, LO.hudY - 27, 210, 54, PAL.hudPill, `레벨 ${G.lvId}`, 28);
+  // 코인
+  pill(g, DW - 250, LO.hudY - 27, 224, 54, PAL.hudPill, '', 0);
+  g.fillStyle = PAL.coinGold; g.beginPath(); g.arc(DW - 218, LO.hudY, 18, 0, TAU); g.fill();
+  g.fillStyle = '#fff'; g.font = '800 28px system-ui'; g.textAlign = 'left';
+  g.fillText(String(G.coins), DW - 190, LO.hudY + 1);
+  pill(g, DW - 82, LO.hudY - 22, 46, 44, PAL.coinGold, '+', 30);
+  // 부스터 잠금 3슬롯
+  const labels = ['lvl 06', 'lvl 08', 'lvl 11'];
+  for (let i = 0; i < 3; i++) {
+    const x = DW / 2 - 180 + i * 128;
+    g.fillStyle = PAL.lockSlotDark; rr(g, x - 46, LO.boosterY - 40, 92, 92, 22); g.fill();
+    g.fillStyle = PAL.lockSlot; rr(g, x - 46, LO.boosterY - 46, 92, 86, 22); g.fill();
+    g.fillStyle = '#fff'; g.font = '700 30px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('🔒', x, LO.boosterY - 16);
+    g.font = '800 20px system-ui'; g.fillText(labels[i], x, LO.boosterY + 22);
+  }
+}
+function drawEnd(G) {
+  const g = CX;
+  g.fillStyle = 'rgba(20,28,52,0.45)'; g.fillRect(0, 0, DW, DH);
+  const won = G.status === 'won';
+  pill(g, DW / 2 - 180, DH / 2 - 120, 360, 90, won ? '#37B84E' : '#E5484D', won ? '정리 완료!' : '공간이 없어요!', 36);
+  pill(g, DW / 2 - 150, DH / 2 + 10, 300, 76, PAL.hudPill, won ? '다음 레벨 ▶' : '다시 시작 ↻', 30);
+  G._endBtn = { x: DW / 2 - 150, y: DH / 2 + 10, w: 300, h: 76 };
+}
+
+// ── 부팅/루프/입력 ────────────────────────────────────────────────────
+let GAME;
+function bootMS2() {
+  CV = document.getElementById('c'); CX = CV.getContext('2d');
+  bakeAllArt(); fitCanvas();
+  addEventListener('resize', fitCanvas);
+  const lv = +(new URLSearchParams(location.search).get('lv') || localStorage.ms2_lv || 1);
+  GAME = makeGame(lv);
+  CV.addEventListener('pointerdown', (ev) => {
+    const p = toGame(ev.clientX, ev.clientY);
+    if (GAME.status !== 'playing') {
+      const b = GAME._endBtn;
+      if (b && p.x > b.x && p.x < b.x + b.w && p.y > b.y && p.y < b.y + b.h) {
+        const next = GAME.status === 'won' ? GAME.lvId + 1 : GAME.lvId;
+        localStorage.ms2_lv = clamp(next, 1, LEVELS2.length);
+        GAME = makeGame(clamp(next, 1, LEVELS2.length));
+      }
+      return;
+    }
+    for (const t of GAME.tiles) {
+      if (t.left <= 0 || !t.exposed) continue;
+      if (Math.abs(p.x - t.x) < 46 && Math.abs(p.y - t.y) < 46) { tapTile(GAME, t); break; }
+    }
+  });
+  let last = performance.now(), acc = 0;
+  const TICK = 1000 / 60;
+  function loop(now) {
+    requestAnimationFrame(loop);
+    acc += Math.min(100, now - last); last = now;
+    while (acc >= TICK) {
+      acc -= TICK;
+      const dt = TICK / 1000;
+      pourTick(GAME, dt);
+      GAME.phys.step();
+      columnTick(GAME, dt);
+      railTick(GAME, dt);
+      dropTick(GAME, dt);
+      trayTick(GAME, dt);
+      winFailTick(GAME, dt);
+    }
+    draw(GAME, TICK / 1000);
+  }
+  requestAnimationFrame(loop);
+  // 헤드리스 검증 훅
+  window.__MS2 = {
+    get G() { return GAME; },
+    tap(i) { const t = GAME.tiles.filter(t2 => t2.exposed && t2.left > 0)[i || 0]; if (t) tapTile(GAME, t); return !!t; },
+    state() {
+      let ride = 0, fall = 0, seat = 0;
+      for (const m of GAME.balls.values()) { if (m.mode === 'ride') ride++; else if (m.mode === 'fall' || m.mode === 'queue') fall++; else if (m.mode === 'seated') seat++; }
+      return { status: GAME.status, ride, fall, seat, tiles: GAME.tiles.filter(t => t.left > 0).length, trays: GAME.trays.map(t => t.stack.length) };
+    },
+  };
+}
+addEventListener('DOMContentLoaded', bootMS2);
+</script></body></html>
